@@ -1,0 +1,173 @@
+[
+  {
+    "file": "00_supplied_notebook.ipynb",
+    "changed_source_cells": [],
+    "source_copy_outputs_cleared": true,
+    "model": "dragonkue/BGE-m3-ko",
+    "project": true,
+    "top_k": 6,
+    "clean": false,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "01_openai_topk4_global_base.ipynb",
+    "changed_source_cells": [
+      13,
+      15,
+      23,
+      26,
+      32,
+      33
+    ],
+    "model": "Alibaba-NLP/gte-multilingual-base",
+    "project": false,
+    "top_k": 4,
+    "candidate_k": 8,
+    "clean": false,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "02_openai_topk4_global_cleanup.ipynb",
+    "changed_source_cells": [
+      9,
+      13,
+      15,
+      23,
+      26,
+      32,
+      33
+    ],
+    "model": "Alibaba-NLP/gte-multilingual-base",
+    "project": false,
+    "top_k": 4,
+    "candidate_k": 8,
+    "clean": true,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "03_openai_topk6_global_base.ipynb",
+    "changed_source_cells": [
+      13,
+      15,
+      23,
+      26,
+      32,
+      33
+    ],
+    "model": "Alibaba-NLP/gte-multilingual-base",
+    "project": false,
+    "top_k": 6,
+    "clean": false,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "04_openai_topk6_project_base.ipynb",
+    "changed_source_cells": [
+      13,
+      32,
+      33
+    ],
+    "model": "Alibaba-NLP/gte-multilingual-base",
+    "project": true,
+    "top_k": 6,
+    "clean": false,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "05_openai_topk6_project_cleanup.ipynb",
+    "changed_source_cells": [
+      9,
+      13,
+      32,
+      33
+    ],
+    "model": "Alibaba-NLP/gte-multilingual-base",
+    "project": true,
+    "top_k": 6,
+    "clean": true,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "06_openai_topk6_project_chunk1000_200.ipynb",
+    "changed_source_cells": [
+      11,
+      13,
+      32,
+      33
+    ],
+    "model": "Alibaba-NLP/gte-multilingual-base",
+    "project": true,
+    "top_k": 6,
+    "clean": false,
+    "chunk": [
+      1000,
+      200
+    ]
+  },
+  {
+    "file": "07_embedding_baai_bge_m3.ipynb",
+    "changed_source_cells": [
+      13,
+      32,
+      33
+    ],
+    "model": "BAAI/bge-m3",
+    "project": true,
+    "top_k": 6,
+    "clean": false,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "08_embedding_dragonkue_bge_m3_ko.ipynb",
+    "changed_source_cells": [
+      13,
+      32,
+      33
+    ],
+    "model": "dragonkue/BGE-m3-ko",
+    "project": true,
+    "top_k": 6,
+    "clean": false,
+    "chunk": [
+      700,
+      100
+    ]
+  },
+  {
+    "file": "09_embedding_nlpai_kure_v1.ipynb",
+    "changed_source_cells": [
+      13,
+      32,
+      33
+    ],
+    "model": "nlpai-lab/KURE-v1",
+    "project": true,
+    "top_k": 6,
+    "clean": false,
+    "chunk": [
+      700,
+      100
+    ]
+  }
+]
