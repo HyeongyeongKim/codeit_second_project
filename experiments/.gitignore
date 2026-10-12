@@ -1,0 +1,15 @@
+# 입력 문서와 비공개 평가 자료
+data/
+*.hwp
+*.hwpx
+*.pdf
+data_list.csv
+rag_eval_dataset*.json
+
+# 실행 중 생성되는 결과. 특히 검색 단계 JSON에는 문서 본문이 포함됩니다.
+*.csv
+bm25_only_comparison_30.json
+hybrid_reranked_top20_30.json
+*.log
+.ipynb_checkpoints/
+__pycache__/

@@ -1,0 +1,170 @@
+[
+  {
+    "file": "experiments/01_early_search_methods.ipynb",
+    "title": "초기 검색 방식 비교",
+    "original_file": "rag_rerank_comparison.ipynb",
+    "original_code_sha256_12": "a443ec6363f2",
+    "prepared_code_sha256_12": "a443ec6363f2",
+    "note": "KoE5/Qwen 기반의 질문 재작성·HyDE·재순위화 탐색. 초기 실험입니다."
+  },
+  {
+    "file": "experiments/02_rfp_dense_exaone_baseline.ipynb",
+    "title": "RFP Dense·HyDE와 EXAONE 기본선",
+    "original_file": "rfp_rag_baseline_easy.ipynb",
+    "original_code_sha256_12": "199523fe891e",
+    "prepared_code_sha256_12": "199523fe891e",
+    "note": "HWP/PDF, CSV 메타데이터, GTE 임베딩, EXAONE 답변을 연결한 초기 전체 파이프라인."
+  },
+  {
+    "file": "experiments/03_openai_generation_trial.ipynb",
+    "title": "OpenAI 답변 생성 시도",
+    "original_file": "rfp_rag_baseline_easy (4).ipynb",
+    "original_code_sha256_12": "858a91f2a3a7",
+    "prepared_code_sha256_12": "858a91f2a3a7",
+    "note": "10월 2일 OpenAI 생성 실험의 당시 작업본. 기존 EXAONE 경로도 함께 남아 있는 탐색 버전입니다."
+  },
+  {
+    "file": "experiments/04_hybrid_rrf_qwen_judge.ipynb",
+    "title": "Dense+BM25+RRF와 Qwen 평가",
+    "original_file": "rfp_rag_baseline_clean_generation_then_eval.ipynb",
+    "original_code_sha256_12": "996cf5f9000d",
+    "prepared_code_sha256_12": "996cf5f9000d",
+    "note": "하이브리드 검색과 재순위화, Qwen2.5-1.5B 채점 실험. 평가 방식의 한계를 함께 기록합니다."
+  },
+  {
+    "file": "experiments/05_hybrid_with_evaluation.ipynb",
+    "title": "원래 질문 하이브리드 검색과 평가",
+    "original_file": "rfp_rag_previous_original_query_hybrid_with_eval.ipynb",
+    "original_code_sha256_12": "e30647628f7a",
+    "prepared_code_sha256_12": "e30647628f7a",
+    "note": "기존 하이브리드 검색 뒤에 평가를 추가한 10월 6일 버전."
+  },
+  {
+    "file": "experiments/06_ragas_basic_preprocessing.ipynb",
+    "title": "RAGAS 기본 문서 처리",
+    "original_file": "평가 부분 구현_정리.ipynb",
+    "original_code_sha256_12": "4e0a588ac856",
+    "prepared_code_sha256_12": "4e0a588ac856",
+    "note": "180문항 JSON과 RAGAS를 연결한 기본 처리 대조군. 실행 환경에 따라 RAGAS·EXAONE 호환 문제가 있었습니다."
+  },
+  {
+    "file": "experiments/07_ragas_cleanup_preservation.ipynb",
+    "title": "RAGAS 문서 정제·보존검사",
+    "original_file": "평가 부분 구현_정제_보존검사_RAGAS.ipynb",
+    "original_code_sha256_12": "2d2ca3570776",
+    "prepared_code_sha256_12": "2d2ca3570776",
+    "note": "NFC·쪽번호·목차·빈 표 정제와 원문 인용 구절 보존검사를 추가한 버전."
+  },
+  {
+    "file": "experiments/08_openai_top6_all_projects.ipynb",
+    "title": "GPT 생성과 검색 수 확대",
+    "original_file": "base + top-k 수정 + generation openai.ipynb",
+    "original_code_sha256_12": "1860572689cc",
+    "prepared_code_sha256_12": "1860572689cc",
+    "note": "사업 제한 없이 후보 20개씩 검색하고 최종 근거 6개를 사용한 실험. 다른 사업 근거 혼입을 확인했습니다."
+  },
+  {
+    "file": "experiments/09_project_filter_gte_700_100.ipynb",
+    "title": "사업 식별과 사업별 검색",
+    "original_file": "base + top-k 수정 + generation openai + 공고 확인.ipynb",
+    "original_code_sha256_12": "bf308e864e15",
+    "prepared_code_sha256_12": "bf308e864e15",
+    "note": "질문에서 사업을 식별하고 해당 사업의 청크만 검색하는 주요 전환점. GTE, 700/100 청킹."
+  },
+  {
+    "file": "experiments/10_project_filter_with_cleanup.ipynb",
+    "title": "사업별 검색에서 정제 재비교",
+    "original_file": "정제 + top-k수정 + generation openai + 공고식별.ipynb",
+    "original_code_sha256_12": "574fd1040954",
+    "prepared_code_sha256_12": "574fd1040954",
+    "note": "사업별 검색과 문서 정제·보존검사를 함께 적용한 비교군. 정제의 순수한 효과는 확정되지 않았습니다."
+  },
+  {
+    "file": "experiments/11_chunk_1000_200.ipynb",
+    "title": "청킹 1000/200 실험",
+    "original_file": "base_+_top_k_수정_+_generation_openai_+_공고_확인+청크_크기.ipynb",
+    "original_code_sha256_12": "cf5021e9737b",
+    "prepared_code_sha256_12": "cf5021e9737b",
+    "note": "700/100 기준본에서 청크 크기와 겹침을 1000/200으로 변경한 실험."
+  },
+  {
+    "file": "experiments/12_embedding_bge_m3.ipynb",
+    "title": "BGE-M3 임베딩 비교 재구성",
+    "original_file": "base + top-k 수정 + generation openai + 공고 확인.ipynb",
+    "original_code_sha256_12": "bf308e864e15",
+    "prepared_code_sha256_12": "380f8a2da6ad",
+    "note": "10월 8일 모델 비교를 남은 전체 코드에서 재구성했습니다. 원본 실행 파일이 아닌 재현용 코드입니다."
+  },
+  {
+    "file": "experiments/13_embedding_kure_v1.ipynb",
+    "title": "KURE-v1 임베딩 비교 재구성",
+    "original_file": "base + top-k 수정 + generation openai + 공고 확인.ipynb",
+    "original_code_sha256_12": "bf308e864e15",
+    "prepared_code_sha256_12": "a6129f5fb6aa",
+    "note": "10월 8일 모델 비교를 남은 전체 코드에서 재구성했습니다. 원본 실행 파일이 아닌 재현용 코드입니다."
+  },
+  {
+    "file": "experiments/14_embedding_bge_m3_ko.ipynb",
+    "title": "BGE-m3-ko 임베딩 비교 재구성",
+    "original_file": "base + top-k 수정 + generation openai + 공고 확인.ipynb",
+    "original_code_sha256_12": "bf308e864e15",
+    "prepared_code_sha256_12": "b13453b4c2bc",
+    "note": "10월 8일 모델 비교를 남은 전체 코드에서 재구성했습니다. 원본 실행 파일이 아닌 재현용 코드입니다."
+  },
+  {
+    "file": "experiments/15_basic_vs_kiwi_bm25.ipynb",
+    "title": "기본 BM25와 Kiwi BM25 비교",
+    "original_file": "현재기준_BGE-M3_기본BM25_vs_KiwiBM25.ipynb",
+    "original_code_sha256_12": "657abbc50ee4",
+    "prepared_code_sha256_12": "657abbc50ee4",
+    "note": "BGE-m3-ko 임베딩, 같은 질문에서 기본·Kiwi BM25의 검색과 답변을 비교한 버전."
+  },
+  {
+    "file": "experiments/16_langsmith_36_basic.ipynb",
+    "title": "36문항 기본 BM25 LangSmith",
+    "original_file": "RFP_3사업_36문항_기본BM25_LangSmith.ipynb",
+    "original_code_sha256_12": "d682144a7af0",
+    "prepared_code_sha256_12": "d682144a7af0",
+    "note": "3개 사업 × 12문항으로 평가 범위를 확대한 기본 BM25 버전."
+  },
+  {
+    "file": "experiments/17_langsmith_36_kiwi.ipynb",
+    "title": "36문항 Kiwi BM25 LangSmith",
+    "original_file": "RFP_3사업_36문항_KiwiBM25_LangSmith.ipynb",
+    "original_code_sha256_12": "a5d12635de68",
+    "prepared_code_sha256_12": "a5d12635de68",
+    "note": "동일한 36문항의 Kiwi BM25 비교 버전."
+  },
+  {
+    "file": "experiments/18_langsmith_30_claude_trial.ipynb",
+    "title": "30문항 Claude 채점 시도",
+    "original_file": "RFP_3사업_30문항_기본BM25_LangSmith.ipynb",
+    "original_code_sha256_12": "07bd98726ae8",
+    "prepared_code_sha256_12": "07bd98726ae8",
+    "note": "3개 사업 × 10문항, 기본 BM25와 Claude 채점 시도. 당시 Claude API 오류가 기록된 실패 실험입니다."
+  },
+  {
+    "file": "experiments/19_langsmith_30_basic_gpt.ipynb",
+    "title": "30문항 기본 BM25 + GPT 채점",
+    "original_file": "RFP_3사업_30문항_기본_Kiwi_BM25_LangSmith_정리.ipynb",
+    "original_code_sha256_12": "55e169a3b94a",
+    "prepared_code_sha256_12": "034bc8af0d25",
+    "note": "통합 노트북의 공통 준비·평가 코드를 기본 BM25 전용 파일로 분리했습니다. Claude 의존성은 제거했습니다."
+  },
+  {
+    "file": "experiments/20_langsmith_30_kiwi_gpt.ipynb",
+    "title": "30문항 Kiwi BM25 + GPT 채점",
+    "original_file": "RFP_3사업_30문항_기본_Kiwi_BM25_LangSmith_정리.ipynb",
+    "original_code_sha256_12": "55e169a3b94a",
+    "prepared_code_sha256_12": "7cad19b603bb",
+    "note": "통합 노트북의 공통 준비·평가 코드를 Kiwi BM25 전용 파일로 분리했습니다. Claude 의존성은 제거했습니다."
+  },
+  {
+    "file": "experiments/21_bm25_search_stage_comparison.ipynb",
+    "title": "30문항 BM25 단독·RRF·재정렬 검색 비교",
+    "original_file": "RFP_3사업_30문항_기본_Kiwi_BM25_LangSmith_정리.ipynb",
+    "original_code_sha256_12": "55e169a3b94a",
+    "prepared_code_sha256_12": "fa68ab6089e3",
+    "note": "통합 노트북에서 검색 단계 비교를 분리했습니다. 답변·채점 API 호출 없이 두 BM25 방식의 상위 20개를 기록합니다."
+  }
+]
