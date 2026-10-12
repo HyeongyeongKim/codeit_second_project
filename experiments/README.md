@@ -6,27 +6,27 @@
 
 | 번호 | 모델·핵심 설정 | 왜 시도했나 · 확인한 점 |
 | --- | --- | --- |
-| [01](01_early_search_methods.ipynb) | 연말정산 PDF, KoE5 임베딩, Qwen2.5-3B, 청크 500/100, 후보 8개 → `BAAI/bge-reranker-v2-m3`로 4개 선택 | RFP 작업 전에 기본 검색·질문 재작성·HyDE가 검색 결과를 어떻게 바꾸는지 시험했습니다. |
-| [02](02_rfp_dense_exaone_baseline.ipynb) | RFP HWP/PDF, GTE 임베딩, EXAONE AWQ 답변, 청크 700/100, 재순위화 4개 | 실제 RFP 문서와 CSV 정보를 연결해 기본 검색과 HyDE의 답변을 비교했습니다. |
-| [03](03_openai_generation_trial.ipynb) | GPT-5 mini 답변, 청크 700/100, 재순위화 4개. OpenAI 임베딩 셀 뒤에 GTE 임베딩 셀이 다시 실행됨 | 답변 모델 변경을 시험한 탐색본입니다. 두 임베딩 결과를 공정하게 비교한 파일은 아닙니다. |
-| [04](04_hybrid_rrf_qwen_judge.ipynb) | GTE+EXAONE, Dense 8개·BM25 8개 → RRF → 재순위화 4개, Qwen2.5-1.5B 채점 | 단어 검색을 더해 정답 청크를 찾고, 검색과 답변을 따로 평가하려 했습니다. |
-| [05](05_hybrid_with_evaluation.ipynb) | 04와 같은 하이브리드·Qwen 평가. HyDE 설정이 있어도 실제 검색은 원래 질문 사용 | 기존 검색 코드 뒤에 평가를 붙인 중간본입니다. HyDE 성능 결과로 해석하면 안 됩니다. |
-| [06](06_ragas_basic_preprocessing.ipynb) | GTE+EXAONE, 청크 700/100, 하이브리드 8+8 → 4개, RAGAS | 실제 참조답이 있는 평가셋으로 검색 근거·답변 충실도·정답성을 평가하려 했습니다. 당시 EXAONE과 RAGAS 연결 오류가 있었습니다. |
-| [07](07_ragas_cleanup_preservation.ipynb) | 06 설정에 쪽 번호·목차·빈 표 정제와 원문 인용 보존검사 추가 | 문서 정제가 검색에 도움이 되는지, 필요한 근거를 지우지 않는지 비교하려 했습니다. |
+| [01](01_early_search_methods.ipynb) | 연말정산 PDF, KoE5 임베딩, Qwen2.5-3B, 청크 500/100, 후보 8개 → `BAAI/bge-reranker-v2-m3`로 4개 선택 | **일반 질문과 HyDE를 비교**했습니다. 당시 한글 문서와 표를 읽는 방법을 몰라 PDF로 먼저 시험했습니다. |
+| [02](02_rfp_dense_exaone_baseline.ipynb) | RFP HWP/PDF, GTE 임베딩, EXAONE AWQ 답변, 청크 700/100, 재순위화 4개 | **한글 로더와 표의 마크다운 추출을 적용**하고 RFP 파일 100개를 임베딩했습니다. 일반 질문과 HyDE 비교를 이어 갔습니다. |
+| [03](03_openai_generation_trial.ipynb) | GPT-5 mini 답변, 청크 700/100, 재순위화 4개. OpenAI 임베딩과 GTE 임베딩 셀은 각각 별도 실행 | **답변 품질을 높이기 위해 OpenAI 생성 모델을 시험**했고 결과가 매우 좋았습니다. GTE 경로도 비교용으로 구현했습니다. |
+| [04](04_hybrid_rrf_qwen_judge.ipynb) | GTE+EXAONE, Dense 8개·BM25 8개 → RRF → 재순위화 4개 | **하이브리드 검색**으로 의미 검색과 단어 검색을 합쳐 근거를 더 잘 찾으려 했습니다. |
+| [05](05_hybrid_with_evaluation.ipynb) | 04의 하이브리드 검색 + Qwen2.5-1.5B 채점(0/0.5/1) + 정답 청크 ID 대조 | **검색 근거와 답변을 평가**했습니다. Qwen은 검색 청크로 질문에 답할 수 있는지와 생성 답변이 빠짐없이 근거에 맞는지 채점합니다. 정답 청크 포함 여부도 따로 봅니다. HyDE 설정은 있지만 실제 검색은 원래 질문을 사용합니다. |
+| [06](06_ragas_basic_preprocessing.ipynb) | GTE+EXAONE, 청크 700/100, 하이브리드 8+8 → 4개, RAGAS | **RAGAS의 문맥 재현율·충실도·사실 정확도**를 계산하려 했습니다. 각각 정답 근거를 찾았는지, 답변이 근거에 기반하는지, 정답과 맞는지를 봅니다. 당시 연결 오류가 있었습니다. |
+| [07](07_ragas_cleanup_preservation.ipynb) | 06 설정에 쪽 번호·목차·빈 표 정제와 원문 인용 보존검사 추가 | 정제 효과를 보려 **기본본과 정제본을 별도 파일로 진행**했습니다. 이 단계 결과만으로는 두 방식의 우열을 비교할 수 없었습니다. |
 | [08](08_openai_top6_all_projects.ipynb) | GTE+GPT-5 mini, Dense 20개·BM25 20개 → 재순위화 6개, 첫 10문항 평가 | 검색 후보와 답변 근거를 늘렸지만 다른 사업 문서가 섞이는 문제를 확인했습니다. |
 | [09](09_project_filter_gte_700_100.ipynb) | 08 설정에 질문의 사업명 식별·사업별 검색 추가, 청크 700/100 | 다른 사업 근거가 섞이지 않도록 검색 범위를 제한했습니다. 이 단계에서 답변 평가가 크게 개선됐습니다. |
-| [10](10_project_filter_with_cleanup.ipynb) | 09 설정에 문서 정제·보존검사 추가 | 사업별 검색을 유지한 채 정제 효과를 다시 살폈습니다. 점수 상승만으로 정제의 효과를 확정하지 않았습니다. |
+| [10](10_project_filter_with_cleanup.ipynb) | 09 설정에 문서 정제·보존검사 추가 | 사업별 검색을 유지한 채 정제 효과를 다시 살폈지만 **뚜렷한 효과가 없어 이후 구성에서 제외**했습니다. |
 | [11](11_chunk_1000_200.ipynb) | 09와 같고 청크만 1000/200으로 변경 | 큰 청크가 근거 검색과 답변에 도움이 되는지 시험했습니다. 채점 오류 사례가 있어 우열은 미확정입니다. |
 | [12](12_embedding_bge_m3.ipynb) | 09 설정에서 임베딩만 `BAAI/bge-m3`로 변경 | GTE와 검색 모델을 비교하기 위한 **재현용 재구성본**입니다. |
 | [13](13_embedding_kure_v1.ipynb) | 09 설정에서 임베딩만 `nlpai-lab/KURE-v1`로 변경 | 같은 질문으로 임베딩 영향을 비교하기 위한 **재현용 재구성본**입니다. |
 | [14](14_embedding_bge_m3_ko.ipynb) | 09 설정에서 임베딩만 `dragonkue/BGE-m3-ko`로 변경 | 한국어 임베딩 후보를 시험한 **재현용 재구성본**입니다. 당시 한 사업 10문항에서 답변 점수가 가장 높았습니다. |
-| [15](15_basic_vs_kiwi_bm25.ipynb) | BGE-m3-ko+GPT-5 mini, 청크 700/100, 기본·Kiwi BM25, 2개 사업 × 2문항 | 한국어 형태소 토큰화가 기존 BM25 검색에 도움이 되는지 작은 범위에서 먼저 비교했습니다. |
-| [16](16_langsmith_36_basic.ipynb) | BGE-m3-ko+GPT-5 mini 답변, 기본 BM25, 근거 6개, Claude 채점, 3개 사업 × 12문항 | 기본 BM25 평가를 여러 사업으로 넓히기 위해 만들었습니다. 전체 실행 완료 여부는 확인되지 않았습니다. |
-| [17](17_langsmith_36_kiwi.ipynb) | 16과 같은 설정에서 Kiwi BM25 사용 | 같은 36문항으로 형태소 토큰화의 차이를 보려 했습니다. 전체 실행 완료 여부는 확인되지 않았습니다. |
-| [18](18_langsmith_30_claude_trial.ipynb) | BGE-m3-ko+GPT-5 mini 답변, 기본 BM25, 근거 6개, Claude 채점, 3×10문항 | 30문항 채점을 시도했지만 당시 Claude API 오류가 있었습니다. 실패 과정도 남겼습니다. |
-| [19](19_langsmith_30_basic_gpt.ipynb) | BGE-m3-ko+GPT-5 mini 답변·채점, 기본 BM25, 재순위화 20개, 3×10문항 | 기본 BM25의 30문항 결과를 LangSmith에 기록하기 위해 통합 파일에서 분리했습니다. 당시 실행 기록이 있습니다. |
-| [20](20_langsmith_30_kiwi_gpt.ipynb) | 19와 같은 설정에서 Kiwi BM25 사용 | 동일한 30문항에서 BM25 토큰화 방법만 바꿔 비교하도록 분리했습니다. 당시 실행 기록이 있습니다. |
-| [21](21_bm25_search_stage_comparison.ipynb) | BGE-m3-ko, 기본·Kiwi BM25 단독/RRF/재순위화 각 상위 20개, 3×10문항 | 답변 모델 없이 어느 검색 단계에서 정답 근거가 달라지는지 확인합니다. 결과 JSON에는 문서 본문이 있어 공개하면 안 됩니다. |
+| [15](15_basic_vs_kiwi_bm25.ipynb) | BGE-m3-ko+GPT-5 mini, 청크 700/100, 기본·Kiwi BM25, 2개 사업 × 2문항 | **기본 BM25와 Kiwi BM25를 4문항으로 비교**했습니다. 표본이 너무 적어 질문 수를 늘리기로 했습니다. |
+| [16](16_langsmith_36_basic.ipynb) | BGE-m3-ko+GPT-5 mini 답변, 기본 BM25, 근거 6개, Claude 채점, 3개 사업 × 12문항 | 기본 BM25 평가를 **36문항**으로 늘리고 Claude 채점을 시도했으나 실패했습니다. |
+| [17](17_langsmith_36_kiwi.ipynb) | 16과 같은 설정에서 Kiwi BM25 사용 | Kiwi BM25도 같은 **36문항**과 Claude 채점으로 비교하려 했으나 채점에 실패했습니다. |
+| [18](18_langsmith_30_claude_trial.ipynb) | BGE-m3-ko+GPT-5 mini 답변, 기본 BM25, 근거 6개, Claude 채점, 3×10문항 | 질문 구성을 **3개 사업 × 10문항**으로 바꿔 Claude 채점을 다시 시도했지만 API 오류로 실패했습니다. 15~18번은 평가 방식과 문항 구성이 바뀌는 과도기입니다. |
+| [19](19_langsmith_30_basic_gpt.ipynb) | BGE-m3-ko+GPT-5 mini 답변·채점, 기본 BM25, 재순위화 20개, 3×10문항 | **기본 BM25 → 하이브리드 검색 → 재순위화**를 거쳐 30문항을 평가했습니다. 통합 파일에서 분리했고 당시 실행 기록이 있습니다. |
+| [20](20_langsmith_30_kiwi_gpt.ipynb) | 19와 같은 설정에서 Kiwi BM25 사용 | **Kiwi BM25 → 하이브리드 검색 → 재순위화**로 같은 30문항을 평가했습니다. 당시 실행 기록이 있습니다. |
+| [21](21_bm25_search_stage_comparison.ipynb) | BGE-m3-ko, 기본·Kiwi BM25 단독/RRF/재순위화 각 상위 20개, 3×10문항 | 기본·Kiwi 각각에서 **단독 검색, 하이브리드 검색, 재순위화**를 비교해 어느 단계가 근거 검색을 개선하는지 봅니다. 결과 JSON에는 문서 본문이 있어 공개하면 안 됩니다. |
 
 **실행 준비:** Colab에서 원하는 파일 하나를 열고 위에서 아래로 실행합니다. 대부분 `/content/drive/MyDrive/data`의 RFP 문서, `/content/drive/MyDrive/data_list.csv`, 평가용 JSON이 필요합니다. API를 쓰는 파일은 첫 셀의 안내대로 Colab 비밀에 키를 등록하세요. 실행 출력·원본 문서·API 키는 이 폴더에 넣지 않았습니다.
 
