@@ -1,6 +1,6 @@
 # RFP RAG 주요 실험
 
-**큰 변경을 한 실험 21개를 시간순으로 모았습니다.** 번호별로 사용한 모델·설정과 시도한 이유를 짧게 적었습니다. 한 파일씩 선택해 실행하는 기록이며, 1번부터 모두 이어서 실행하는 과정은 아닙니다. 02~21번의 재순위화 모델은 `Alibaba-NLP/gte-multilingual-reranker-base`입니다.
+**기존 주요 실험 21개와 새 비교 실험 23번을 모았습니다.** 번호별로 사용한 모델·설정과 시도한 이유를 짧게 적었습니다. 한 파일씩 선택해 실행하는 기록이며, 1번부터 모두 이어서 실행하는 과정은 아닙니다. 22번은 앞서 요청에 따라 제거되어 번호를 비워 두었습니다. 02~21번의 재순위화 모델은 `Alibaba-NLP/gte-multilingual-reranker-base`입니다.
 
 모델 이름: **GTE**=`Alibaba-NLP/gte-multilingual-base`, **KoE5**=`nlpai-lab/KoE5`, **EXAONE AWQ**=`LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct-AWQ`, **BGE-m3-ko**=`dragonkue/BGE-m3-ko`. **GPT-5 mini**는 답변 생성 또는 채점에 사용한 OpenAI 모델입니다.
 
@@ -27,7 +27,9 @@
 | [19](19_langsmith_30_basic_gpt.ipynb) | BGE-m3-ko+GPT-5 mini 답변·채점, 기본 BM25, 재순위화 20개, 3×10문항 | **기본 BM25 → 하이브리드 검색 → 재순위화**를 거쳐 30문항을 평가했습니다. 통합 파일에서 분리했고 당시 실행 기록이 있습니다. |
 | [20](20_langsmith_30_kiwi_gpt.ipynb) | 19와 같은 설정에서 Kiwi BM25 사용 | **Kiwi BM25 → 하이브리드 검색 → 재순위화**로 같은 30문항을 평가했습니다. 당시 실행 기록이 있습니다. |
 | [21](21_bm25_search_stage_comparison.ipynb) | BGE-m3-ko, 기본·Kiwi BM25 단독/RRF/재순위화 각 상위 20개, 3×10문항 | 기본·Kiwi 각각에서 **단독 검색, 하이브리드 검색, 재순위화**를 비교해 어느 단계가 근거 검색을 개선하는지 봅니다. 결과 JSON에는 문서 본문이 있어 공개하면 안 됩니다. |
+| [23](23_kiwi_bm25_gpt5mini_vs_qwen38_30.ipynb) | Kiwi BM25 단독 검색 상위 20개 중 앞의 4개를 GPT-5 mini와 Qwen3.8-27B Q3_K_S에 동일하게 전달, 3×10문항 | **생성 모델만 바꿔 답변 30쌍을 비교**합니다. 20번의 GPT 답변은 하이브리드 검색 결과이므로 여기서 GPT 답변도 다시 생성합니다. 결과는 Drive에 저장합니다. **아직 실제 실행 결과는 없습니다.** |
 
 **실행 준비:** Colab에서 원하는 파일 하나를 열고 위에서 아래로 실행합니다. 대부분 `/content/drive/MyDrive/data`의 RFP 문서, `/content/drive/MyDrive/data_list.csv`, 평가용 JSON이 필요합니다. API를 쓰는 파일은 첫 셀의 안내대로 Colab 비밀에 키를 등록하세요. 실행 출력·원본 문서·API 키는 이 폴더에 넣지 않았습니다.
 
 점수와 한계의 자세한 근거는 [실험 기록](../RAG_실험_기록.md)과 [10월 8일 보고서](../2026-10-08_RAG_상세_보고서.md)에 있습니다.
+
