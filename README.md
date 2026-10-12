@@ -2,7 +2,8 @@
 
 **RFP 문서를 읽고, 관련 내용을 찾아 답하는 RAG 시스템의 실험 기록입니다.** 초기 코드부터 BM25·Kiwi 비교와 LangSmith 평가까지 주요 시도를 시간순으로 보관했습니다.
 
-- [주요 실험 코드 21개](experiments/README.md): 파일별 변화와 실행 준비
+- [주요 실험 코드 22개](experiments/README.md): 파일별 변화와 실행 준비
+- [새 실험: Kiwi BM25 단독 + Qwen3.8 양자화 답변 3문항](experiments/22_kiwi_bm25_qwen38_quantized_preview.ipynb)
 - [현재 기준: 사업별 검색·기본 BM25](현재기준_사업식별_BGE-M3_기본BM25.ipynb)
 - [기본 BM25와 Kiwi BM25 비교](현재기준_BGE-M3_기본BM25_vs_KiwiBM25.ipynb)
 - [전체 실험 기록](RAG_실험_기록.md) · [10월 8일 상세 보고서](2026-10-08_RAG_상세_보고서.md)
