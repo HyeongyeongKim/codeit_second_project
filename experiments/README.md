@@ -2,7 +2,7 @@
 
 실험이 이어진 **변경 이유 → 방법 → 결과 → 다음 변경 이유**는 [실험의 의사결정 흐름](../EXPERIMENT_JOURNEY.md)에 정리했습니다. 이 표는 각 노트북의 설정을 찾기 위한 색인입니다.
 
-**기존 주요 실험 21개와 생성 모델 비교 22번, 미실행 청킹 비교 23번을 모았습니다.** 번호별로 사용한 모델·설정과 시도한 이유를 짧게 적었습니다. 한 파일씩 선택해 실행하는 기록이며, 1번부터 모두 이어서 실행하는 과정은 아닙니다. 02~21번의 재순위화 모델은 `Alibaba-NLP/gte-multilingual-reranker-base`입니다.
+**기존 주요 실험 21개와 생성 모델 비교 22번, 청킹 비교 23번을 모았습니다.** 번호별로 사용한 모델·설정과 시도한 이유를 짧게 적었습니다. 한 파일씩 선택해 실행하는 기록이며, 1번부터 모두 이어서 실행하는 과정은 아닙니다. 02~21번의 재순위화 모델은 `Alibaba-NLP/gte-multilingual-reranker-base`입니다.
 
 모델 이름: **GTE**=`Alibaba-NLP/gte-multilingual-base`, **KoE5**=`nlpai-lab/KoE5`, **EXAONE AWQ**=`LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct-AWQ`, **BGE-m3-ko**=`dragonkue/BGE-m3-ko`. **GPT-5 mini**는 답변 생성 또는 채점에 사용한 OpenAI 모델입니다.
 
@@ -30,7 +30,7 @@
 | [20](20_langsmith_30_kiwi_gpt.ipynb) | 19와 같은 설정에서 Kiwi BM25 사용 | **Kiwi BM25 → 하이브리드 검색 → 재순위화**로 같은 30문항을 평가했습니다. 당시 실행 기록이 있습니다. |
 | [21](21_bm25_search_stage_comparison.ipynb) | BGE-m3-ko, 기본·Kiwi BM25 단독/RRF/재순위화 각 상위 20개, 3×10문항 | 기본·Kiwi 각각에서 **단독 검색, 하이브리드 검색, 재순위화**를 비교해 어느 단계가 근거 검색을 개선하는지 봅니다. 결과 JSON에는 문서 본문이 있어 공개하면 안 됩니다. |
 | [22](22_kiwi_bm25_gpt5mini_vs_qwen38_30.ipynb) | Kiwi BM25 단독 검색 상위 20개 중 앞의 4개를 GPT-5 mini와 Qwen3.8-27B Q3_K_S에 동일하게 전달, 3×10문항 | **생성 모델만 바꿔 답변을 비교**합니다. 20번의 GPT 답변은 하이브리드 검색 결과이므로 여기서 다시 생성합니다. [10월 12일 Notion 기록](https://app.notion.com/p/3f767f3920118062bf69f1db0e198c33)은 서버 중단 뒤 저장된 답변부터 이어 실행했고 두 모델의 품질 차이가 크지 않았다고 보고합니다. 이 저장소에는 결과 CSV가 없어 수치와 완료 범위를 독립 검증할 수 없습니다. |
-| [23](23_chunking_three_way.ipynb) | 같은 30문항·BGE-m3-ko·기본 BM25·RRF·재정렬·GPT 평가에서 700/100, parent–child, 구조 기반 청킹을 비교 | **코드만 준비했으며 실제 원문·API를 이용한 실행 결과는 아직 없습니다.** parent–child는 child로 검색하고 parent를 답변 문맥에 주므로 최종 문맥 개수와 글자 수도 함께 기록합니다. |
+| [23](23_chunking_three_way.ipynb) | 같은 30문항·BGE-m3-ko·기본 BM25·RRF·재정렬·GPT 평가에서 700/100, parent–child, 구조 기반 청킹을 비교 | **세 방식 × 30문항 실행 완료.** GPT 평균은 700/100 **0.7550**, parent–child **0.6957**, 구조 기반 **0.7133**입니다. parent–child는 인용 포함률이 가장 높지만 문맥도 가장 깁니다. [실행 결과와 문항별 점수](../CHUNKING_3WAY_RESULTS_2026-10-13.md) |
 
 **실행 준비:** Colab에서 원하는 파일 하나를 열고 위에서 아래로 실행합니다. 대부분 `/content/drive/MyDrive/data`의 RFP 문서, `/content/drive/MyDrive/data_list.csv`, 평가용 JSON이 필요합니다. API를 쓰는 파일은 첫 셀의 안내대로 Colab 비밀에 키를 등록하세요. 실행 출력·원본 문서·API 키는 이 폴더에 넣지 않았습니다.
 
