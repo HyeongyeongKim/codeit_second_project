@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import struct
 import tempfile
 import unittest
@@ -8,11 +9,12 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from rfp_rag.config import RagSettings
-from rfp_rag.data import (load_benchmark, normalize_filename, parse_files,
+from rfp_rag.data import (EVALUATION_QUESTION_IDS, load_benchmark, normalize_filename, parse_files,
                           select_evaluation_questions)
 from rfp_rag.evaluation import retrieval_scores
 from rfp_rag.hwp_parser_fix import apply_hwp_parser_fix
 from rfp_rag.pipeline import RagPipeline
+from run import run_ragas
 
 
 class CoreTests(unittest.TestCase):
@@ -125,6 +127,37 @@ class CoreTests(unittest.TestCase):
         self.assertIsInstance(pipeline.chat_model, FakeChatAnthropic)
         self.assertEqual(calls[0]["model"], "claude-haiku-4-5-20251001")
         self.assertEqual(calls[0]["max_tokens"], 4096)
+
+    def test_ragas_uses_gemini_for_only_the_selected_30_questions(self):
+        calls = []
+        module = ModuleType("langchain_google_genai")
+
+        class FakeChatGoogleGenerativeAI:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        class FakeScores:
+            def __getitem__(self, key):
+                self_id = list(EVALUATION_QUESTION_IDS)
+                return SimpleNamespace(tolist=lambda: self_id)
+
+        class FakeResult:
+            def select_dtypes(self, kind):
+                return SimpleNamespace(mean=lambda: SimpleNamespace(to_string=lambda: "ok"))
+
+        module.ChatGoogleGenerativeAI = FakeChatGoogleGenerativeAI
+        ids = list(EVALUATION_QUESTION_IDS)
+        samples = [{"user_input": question_id} for question_id in ids]
+        with patch.dict("sys.modules", {"langchain_google_genai": module}), \
+                patch.dict(os.environ, {"GOOGLE_API_KEY": "test-key"}), \
+                patch("rfp_rag.ragas_eval.evaluate_ragas", return_value=FakeResult()) as evaluate:
+            run_ragas(samples, ids, FakeScores(), RagSettings(), Path("results"))
+            self.assertEqual(evaluate.call_args.args[0], samples)
+            self.assertEqual(evaluate.call_args.args[1], ids)
+            with self.assertRaisesRegex(ValueError, "30개"):
+                run_ragas(samples[:-1], ids[:-1], FakeScores(), RagSettings(), Path("results"))
+        self.assertEqual(calls[0]["model"], "gemini-3.1-flash-lite")
+        self.assertEqual(calls[0]["timeout"], 300)
 
 
 if __name__ == "__main__":

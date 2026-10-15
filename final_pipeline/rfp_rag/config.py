@@ -25,7 +25,7 @@ class RagSettings:
     generation_retries: int = 4
     judge_model: str = "gpt-5-mini-2025-08-07"
     judge_reasoning_effort: str = "low"
-    ragas_model: str = "gpt-5-mini-2025-08-07"
+    ragas_model: str = "gemini-3.1-flash-lite"
     ragas_max_workers: int = 1
     ragas_max_retries: int = 2
     ragas_timeout: int = 300
@@ -37,6 +37,8 @@ class RagSettings:
             raise ValueError("bm25_mode는 kiwi 또는 current여야 합니다.")
         if self.generation_max_tokens <= 0:
             raise ValueError("generation_max_tokens는 양수여야 합니다.")
+        if not self.ragas_model.startswith("gemini-"):
+            raise ValueError("ragas_model에는 Gemini 모델 ID를 지정하세요.")
         for name in ("dense_k", "bm25_k", "rrf_k", "reranker_batch_size", "final_context_count"):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name}은 양수여야 합니다.")

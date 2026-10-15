@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 입력 | DEV v1.1의 100개 문서 중 `DOC001`, `DOC010`, `DOC020`, `DOC030`, `DOC040`, `DOC050`, `DOC060`, `DOC070`, `DOC080`, `DOC090`의 질문 각 3개, 총 30문항 평가. PDF/HWP/HWPX의 표 Markdown 추출 |
+| 입력 | DEV v1.1의 `DOC001`, `DOC010`, `DOC020`, `DOC030`, `DOC040`, `DOC050`, `DOC060`, `DOC070`, `DOC080`, `DOC090`에서 각 3문항씩, 총 30문항을 검색과 답변 생성에 똑같이 사용. 검색 대상 문서는 100개 전체. PDF/HWP/HWPX의 표 Markdown 추출 |
 | 청킹 | 700자, 겹침 100자, 구분자 `\n\n` → `\n` → 공백 |
 | 임베딩 | `dragonkue/BGE-m3-ko`, 배치 16, 정규화, GPU가 있으면 CUDA |
 | 검색 | 사업명을 특정할 수 있으면 해당 사업만, 아니면 전체 문서 |
@@ -15,7 +15,8 @@
 | 재순위화 | `Alibaba-NLP/gte-multilingual-reranker-base`, 배치 8, 최종 문맥 6개 |
 | 질문 방식 | 원래 질문을 그대로 검색에 사용 |
 | 답변 생성 | `claude-haiku-4-5-20251001`, 최대 출력 4096토큰 |
-| 답변 판정·RAGAS 평가 | 비교 기준을 유지하도록 `gpt-5-mini-2025-08-07` 사용 |
+| 답변 판정 | `gpt-5-mini-2025-08-07`로 LLM-as-judge 평가 |
+| RAGAS 평가 모델 | `gemini-3.1-flash-lite` |
 | RAGAS | `context_recall`, `faithfulness`, `factual_correctness(mode=f1)`; 작업자 1, 재시도 2, 제한 시간 300초 |
 
 모델과 검색 값을 바꾸려면 `rfp_rag/config.py`를 수정하거나 `run.py`의 옵션을 사용하세요. `--generation-model`에는 Claude 또는 OpenAI 모델 ID를 지정할 수 있습니다. 다른 제공자를 쓴다면 `RagPipeline`에 `embeddings=`, `chat_model=`, `reranker=` 객체를 주입할 수 있습니다. 기본 실행은 위 표와 같습니다.
@@ -39,19 +40,15 @@ python -m pip install -r requirements.txt
 python run.py show-config
 ```
 
-`ANTHROPIC_API_KEY`를 환경 변수나 Colab 보안 비밀에 설정합니다. `evaluate`와 `ragas` 명령은 GPT-5 mini로 평가하므로 `OPENAI_API_KEY`도 필요합니다. Colab에서는 먼저 Drive를 마운트합니다. 기본 경로는 원본 노트북과 같은 `/content/drive/MyDrive/data`, `/content/drive/MyDrive/data_list.csv`, `/content/drive/MyDrive/dev_benchmark_v1.1.json`입니다. 로컬에서는 아래처럼 경로를 지정합니다.
+Colab에서는 먼저 Drive를 마운트합니다. 기본 경로는 원본 노트북과 같은 `/content/drive/MyDrive/data`, `/content/drive/MyDrive/data_list.csv`, `/content/drive/MyDrive/dev_benchmark_v1.1.json`입니다. 로컬에서는 아래처럼 경로를 지정합니다.
 
 ```bash
 python run.py evaluate --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json --out-dir ./results
 ```
 
-평가에서는 지정한 10개 문서의 질문 30개만 사용합니다. 검색 코퍼스는 기존의 100개 문서를 그대로 사용합니다. 먼저 적은 수의 문항으로 실행을 확인하려면 다음처럼 실행합니다.
+평가에서는 지정한 10개 문서의 질문 30개를 검색과 생성에 각각 사용합니다. 질문 하나가 검색 입력과 생성 입력에 함께 쓰이며, 질문별 답변과 검색 문맥도 30개씩 저장됩니다. 검색 코퍼스는 기존의 100개 문서를 그대로 사용합니다. 문항 수를 줄이는 옵션은 없습니다.
 
-```bash
-python run.py evaluate --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json --limit 3 --skip-ragas
-```
-
-`evaluate`는 기본 지표와 RAGAS를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 30개 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다.
+`evaluate`는 기본 지표와 RAGAS를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 30개 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다. 이전에 GPT 모델로 저장한 실행 설정도 이 명령에서는 Gemini 기본값으로 전환됩니다.
 
 ```bash
 python run.py ragas --out-dir ./results
@@ -64,6 +61,24 @@ python run.py answer --question "사업명에 관한 입찰 참가 자격은?" -
 ```
 
 예를 들어 임베딩만 바꾸려면 `--embedding-model BAAI/bge-m3`, 일반 BM25를 비교하려면 `--bm25-mode current`를 사용합니다. 그 외 `--chunk-size`, `--chunk-overlap`, `--dense-k`, `--bm25-k`, `--rrf-k`, `--reranker-model`, `--final-context-count`, `--generation-model`, `--generation-max-tokens`, `--judge-model`, `--ragas-model`을 독립적으로 바꿀 수 있습니다. `ragas` 명령은 저장된 `run_config.json`을 읽어 원래 실행의 설정을 이어받습니다.
+
+## API 키 넣는 곳
+
+키 값은 코드나 GitHub에 적지 않습니다. Google Colab에서는 왼쪽 사이드바의 **열쇠 모양 아이콘 → 보안 비밀(Secrets)**에 아래 이름으로 추가하고, 해당 노트북의 접근을 허용하세요. 로컬 PowerShell에서는 실행할 터미널에 환경 변수로 설정합니다.
+
+| 키 이름 | 쓰는 곳 | 필요한 명령 |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Claude Haiku 4.5 답변 생성 | `answer`, `evaluate` |
+| `OPENAI_API_KEY` | GPT-5 mini 답변 판정(LLM-as-judge) | `evaluate` |
+| `GOOGLE_API_KEY` | Gemini 3.1 Flash-Lite RAGAS 평가 | `evaluate`(RAGAS 포함), `ragas` |
+
+```powershell
+$env:ANTHROPIC_API_KEY = "실제 Anthropic 키"
+$env:OPENAI_API_KEY = "실제 OpenAI 키"
+$env:GOOGLE_API_KEY = "실제 Gemini API 키"
+```
+
+`evaluate --skip-ragas`에는 `GOOGLE_API_KEY`가 필요하지 않습니다. 저장된 결과에 `ragas`만 실행할 때는 `GOOGLE_API_KEY`만 필요합니다.
 
 ## 제거한 오류 대응 코드
 
