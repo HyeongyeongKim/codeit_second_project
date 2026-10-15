@@ -267,16 +267,18 @@ class RagPipeline:
         )
         ranked_chunks = [found[row["corpus_id"]] for row in ranking]
         top_contexts = ranked_chunks[:self.settings.final_context_count]
+        ranked_chunk_ids = [doc.metadata["chunk_id"] for doc in ranked_chunks]
         ranked_sources = list(dict.fromkeys(doc.metadata.get("파일명", "")
                                             for doc in ranked_chunks))
         elapsed_ms = 1000 * (route_seconds + time.perf_counter() - started)
-        result = (project_key, query, found, top_contexts, ranked_sources, elapsed_ms)
+        result = (project_key, query, found, top_contexts, ranked_sources,
+                  ranked_chunk_ids, elapsed_ms)
         self.retrieval_cache[cache_key] = result
         return result
 
     def answer(self, query, *, bm25_mode=None):
         bm25_mode = bm25_mode or self.settings.bm25_mode
-        project_key, search_text, found, contexts, ranked_sources, elapsed_ms = self.retrieve(
+        project_key, search_text, found, contexts, ranked_sources, ranked_chunk_ids, elapsed_ms = self.retrieve(
             query, bm25_mode=bm25_mode
         )
         context = "\n\n".join(
@@ -299,6 +301,7 @@ class RagPipeline:
             "retrieval_scope": "identified_project" if project_key else "all_documents",
             "retrieved_sources": [doc.metadata.get("파일명", "") for doc in contexts],
             "ranked_document_sources": ranked_sources,
+            "ranked_chunk_ids": ranked_chunk_ids,
             "retrieval_time_ms": elapsed_ms,
             "search_text": search_text, "answer": answer,
             "contexts": [doc.page_content for doc in contexts],

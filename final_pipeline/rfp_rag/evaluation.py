@@ -1,10 +1,12 @@
-"""Local versions of the notebook's document and answer evaluation metrics."""
+"""Chunk retrieval, evidence coverage, and answer evaluation metrics."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import math
+import re
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
@@ -12,28 +14,66 @@ from .config import RagSettings
 from .data import normalize_filename
 
 METRIC_KEYS = (
-    "llm_as_judge", "semantic_similarity", "document_hit_at_1",
-    "document_hit_at_5", "document_recall_at_5", "document_mrr",
-    "document_mrr_at_5", "document_ndcg_at_5",
+    "llm_as_judge", "semantic_similarity", "evidence_quote_recall_in_context",
+    "all_evidence_quotes_in_context",
+)
+CHUNK_METRIC_KEYS = (
+    "chunk_hit_at_1", "chunk_hit_at_5", "chunk_recall_at_5",
+    "chunk_mrr", "chunk_mrr_at_5", "chunk_ndcg_at_5",
 )
 
 
-def document_rank(ranked_sources: list[str], source_filename: str) -> int | None:
-    target = normalize_filename(source_filename)
-    sources = list(dict.fromkeys(normalize_filename(name) for name in ranked_sources))
-    return next((rank for rank, source in enumerate(sources, 1) if source == target), None)
+def _normalize_evidence(text: str) -> str:
+    """Keep matching strict while ignoring Unicode form and layout whitespace."""
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text).casefold())
 
 
-def retrieval_scores(ranked_sources: list[str], source_filename: str) -> dict[str, float]:
-    rank = document_rank(ranked_sources, source_filename)
-    hit_5 = float(rank is not None and rank <= 5)
+def build_chunk_evidence_index(chunks) -> dict[str, list[tuple[int, str]]]:
+    """Index all chunks by source file; chunk IDs belong to this corpus run only."""
+    indexed = defaultdict(list)
+    for chunk in chunks:
+        source = normalize_filename(chunk.metadata["파일명"])
+        indexed[source].append((chunk.metadata["chunk_id"], _normalize_evidence(chunk.page_content)))
+    return indexed
+
+
+def match_evidence_chunks(item: dict, indexed_chunks: dict) -> list[set[int]]:
+    """Find chunks containing each quoted benchmark fact in its source file."""
+    quotes = item["evidence_quotes"]
+    if not quotes:
+        raise ValueError(f"근거 문장이 없어 청크 평가를 할 수 없습니다: {item['id']}")
+    source_chunks = indexed_chunks.get(normalize_filename(item["source_filename"]))
+    if not source_chunks:
+        raise ValueError(f"정답 문서 청크가 없습니다: {item['id']}")
+    matches = []
+    for quote in quotes:
+        needle = _normalize_evidence(quote)
+        if not needle:
+            raise ValueError(f"빈 근거 문장이 있습니다: {item['id']}")
+        matches.append({chunk_id for chunk_id, text in source_chunks if needle in text})
+    return matches
+
+
+def retrieval_scores(ranked_chunk_ids: list[int], relevant_chunk_ids: set[int]) -> dict[str, float]:
+    """Score the reranked chunks, using quote-aligned chunks as proxy labels."""
+    if not relevant_chunk_ids:
+        raise ValueError("근거 청크가 없어 검색 점수를 계산할 수 없습니다.")
+    if len(ranked_chunk_ids) != len(set(ranked_chunk_ids)):
+        raise ValueError("재순위화된 검색 결과에 중복 청크 ID가 있습니다.")
+    rank = next((i for i, chunk_id in enumerate(ranked_chunk_ids, 1)
+                 if chunk_id in relevant_chunk_ids), None)
+    top_5 = ranked_chunk_ids[:5]
+    matched_top_5 = sum(chunk_id in relevant_chunk_ids for chunk_id in top_5)
+    dcg = sum(1 / math.log2(i + 1) for i, chunk_id in enumerate(top_5, 1)
+              if chunk_id in relevant_chunk_ids)
+    idcg = sum(1 / math.log2(i + 1) for i in range(1, min(5, len(relevant_chunk_ids)) + 1))
     return {
-        "document_hit_at_1": float(rank == 1),
-        "document_hit_at_5": hit_5,
-        "document_recall_at_5": hit_5,  # Exactly one correct document per question.
-        "document_mrr": 1 / rank if rank else 0.0,
-        "document_mrr_at_5": 1 / rank if rank and rank <= 5 else 0.0,
-        "document_ndcg_at_5": 1 / math.log2(rank + 1) if rank and rank <= 5 else 0.0,
+        "chunk_hit_at_1": float(rank == 1),
+        "chunk_hit_at_5": float(rank is not None and rank <= 5),
+        "chunk_recall_at_5": matched_top_5 / len(relevant_chunk_ids),
+        "chunk_mrr": 1 / rank if rank else 0.0,
+        "chunk_mrr_at_5": 1 / rank if rank and rank <= 5 else 0.0,
+        "chunk_ndcg_at_5": dcg / idcg,
     }
 
 
@@ -106,8 +146,10 @@ def evaluate_questions(pipeline, items: list[dict], out_dir: Path, *, judge=None
 
     out_dir.mkdir(parents=True, exist_ok=True)
     judge = judge or GPTJudge(pipeline.settings)
+    indexed_chunks = build_chunk_evidence_index(pipeline.chunks)
     answers = []
     rows = []
+    alignments = []
     ragas_samples = []
     for index, item in enumerate(items, 1):
         record = pipeline.answer(item["query"])
@@ -115,18 +157,40 @@ def evaluate_questions(pipeline, items: list[dict], out_dir: Path, *, judge=None
         if not answer or not record["contexts"]:
             raise ValueError(f"답변 또는 검색 문맥이 비어 있습니다: {item['id']}")
         judge_score, judge_reason = judge.score(item["query"], item["reference"], answer)
-        retrieval = retrieval_scores(record["ranked_document_sources"], item["source_filename"])
+        quote_matches = match_evidence_chunks(item, indexed_chunks)
+        alignment_complete = all(quote_matches)
+        relevant_chunk_ids = set().union(*quote_matches)
+        retrieval = (retrieval_scores(record["ranked_chunk_ids"], relevant_chunk_ids)
+                     if alignment_complete else dict.fromkeys(CHUNK_METRIC_KEYS, None))
+        final_ids = set(record["chunk_ids"])
+        quotes_in_context = sum(bool(matches & final_ids) for matches in quote_matches)
         row = {
             "id": item["id"], "document_id": item["document_id"],
             "project": item["project"], "source_length_chars": item["source_length_chars"],
             "llm_as_judge": judge_score, "semantic_similarity": cosine_similarity(
                 pipeline.embeddings, answer, item["reference"]
             ),
+            "chunk_evidence_aligned": alignment_complete,
+            "evidence_quote_count": len(quote_matches),
+            "evidence_quote_aligned_count": sum(bool(matches) for matches in quote_matches),
+            "evidence_quote_recall_in_context": quotes_in_context / len(quote_matches),
+            "all_evidence_quotes_in_context": float(quotes_in_context == len(quote_matches)),
+            "relevant_chunk_count": len(relevant_chunk_ids),
             **retrieval, "retrieval_time_ms": record["retrieval_time_ms"],
             "judge_reason": judge_reason,
         }
         rows.append(row)
         answers.append({"id": item["id"], **record})
+        alignments.append({
+            "id": item["id"], "source_filename": item["source_filename"],
+            "evidence": [
+                {"quote": quote, "matching_chunk_ids": sorted(matches)}
+                for quote, matches in zip(item["evidence_quotes"], quote_matches)
+            ],
+            "chunk_evidence_aligned": alignment_complete,
+            "ranked_chunk_ids": record["ranked_chunk_ids"],
+            "final_context_chunk_ids": record["chunk_ids"],
+        })
         ragas_samples.append({
             "user_input": item["query"],
             "retrieved_contexts": record["contexts"],
@@ -135,9 +199,12 @@ def evaluate_questions(pipeline, items: list[dict], out_dir: Path, *, judge=None
         })
         print(f"[{index}/{len(items)}] {item['id']} 완료", flush=True)
     scores = pd.DataFrame(rows)
+    for key in CHUNK_METRIC_KEYS:
+        scores[key] = pd.to_numeric(scores[key], errors="coerce").astype(float)
     _validate_base_scores(scores, items)
     scores.to_csv(out_dir / "base_scores.csv", index=False, encoding="utf-8-sig")
     _write_jsonl(out_dir / "base_answers.jsonl", answers)
+    _write_jsonl(out_dir / "chunk_evidence_alignment.jsonl", alignments)
     (out_dir / "ragas_samples.json").write_text(
         json.dumps(ragas_samples, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -155,8 +222,16 @@ def _validate_base_scores(frame, items):
         lower = -1 if key == "semantic_similarity" else 0
         if key not in frame or frame[key].isna().any() or not frame[key].between(lower, 1).all():
             raise RuntimeError(f"평가 점수 누락 또는 범위 오류: {key}")
-    if not (frame["document_hit_at_5"] == frame["document_recall_at_5"]).all():
-        raise RuntimeError("정답 문서가 하나인데 Hit@5와 Recall@5가 다릅니다.")
+    aligned = frame["chunk_evidence_aligned"]
+    for key in CHUNK_METRIC_KEYS:
+        if key not in frame or frame.loc[aligned, key].isna().any() or not frame.loc[aligned, key].between(0, 1).all():
+            raise RuntimeError(f"청크 평가 점수 누락 또는 범위 오류: {key}")
+        if frame.loc[~aligned, key].notna().any():
+            raise RuntimeError(f"근거가 연결되지 않은 문항에 청크 점수가 있습니다: {key}")
+    if not (frame["evidence_quote_aligned_count"] <= frame["evidence_quote_count"]).all():
+        raise RuntimeError("근거 문장 연결 개수가 전체 개수보다 많습니다.")
+    if not (aligned == (frame["evidence_quote_aligned_count"] == frame["evidence_quote_count"])).all():
+        raise RuntimeError("근거 문장 연결 상태가 개수와 다릅니다.")
     if not np.isfinite(frame["retrieval_time_ms"]).all() or (frame["retrieval_time_ms"] < 0).any():
         raise RuntimeError("검색 시간에 잘못된 값이 있습니다.")
 
@@ -172,7 +247,8 @@ def _save_length_summary(scores, path: Path) -> None:
 
     document_frame = scores.groupby("document_id", as_index=False).agg(
         source_length_chars=("source_length_chars", "first"),
-        document_mrr=("document_mrr", "mean"),
+        chunk_mrr=("chunk_mrr", "mean"),
+        aligned_question_count=("chunk_evidence_aligned", "sum"),
     )
     if len(document_frame) >= 3:
         document_frame["length_group"] = pd.qcut(
@@ -181,10 +257,14 @@ def _save_length_summary(scores, path: Path) -> None:
         )
         summary = document_frame.groupby("length_group", observed=True).agg(
             document_count=("document_id", "count"),
+            aligned_question_count=("aligned_question_count", "sum"),
             min_chars=("source_length_chars", "min"),
             max_chars=("source_length_chars", "max"),
-            mean_mrr=("document_mrr", "mean"),
+            mean_chunk_mrr=("chunk_mrr", "mean"),
         ).reset_index()
     else:
-        summary = pd.DataFrame(columns=["length_group", "document_count", "min_chars", "max_chars", "mean_mrr"])
+        summary = pd.DataFrame(columns=[
+            "length_group", "document_count", "aligned_question_count",
+            "min_chars", "max_chars", "mean_chunk_mrr",
+        ])
     summary.to_csv(path, index=False, encoding="utf-8-sig")

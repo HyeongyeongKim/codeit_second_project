@@ -1,12 +1,12 @@
 # RFP RAG 최종 파이프라인 (Python 모듈)
 
-제공된 `RFP_최종_Dense_KiwiBM25_리랭커_GPT5mini (3) (1).ipynb`의 실행 경로를 Python 파일로 분리했습니다. 문서 파싱, 사업 식별, Dense+Kiwi BM25 검색, RRF, 재순위화와 평가 지표를 유지하면서 답변 생성 모델을 Claude Haiku 4.5로 변경했습니다.
+제공된 `RFP_최종_Dense_KiwiBM25_리랭커_GPT5mini (3) (1).ipynb`의 실행 경로를 Python 파일로 분리했습니다. 문서 파싱, 사업 식별, Dense+Kiwi BM25 검색, RRF, 재순위화와 답변 생성 모델 Claude Haiku 4.5 설정을 유지합니다. 검색 평가는 정답 문서 순위 대신 근거 청크 순위로 계산합니다.
 
 ## 기본 설정
 
 | 항목 | 값 |
 |---|---|
-| 입력 | DEV v1.1의 `DOC001`, `DOC010`, `DOC020`, `DOC030`, `DOC040`, `DOC050`, `DOC060`, `DOC070`, `DOC080`, `DOC090`에서 각 3문항씩, 총 30문항을 검색과 답변 생성에 똑같이 사용. 검색 대상 문서는 100개 전체. PDF/HWP/HWPX의 표 Markdown 추출 |
+| 입력 | DEV v1.1의 100개 문서(`DOC001`~`DOC100`)에서 각 3문항씩, 총 300문항을 검색과 답변 생성에 똑같이 사용. 검색 대상도 100개 문서 전체. PDF/HWP/HWPX의 표 Markdown 추출 |
 | 청킹 | 700자, 겹침 100자, 구분자 `\n\n` → `\n` → 공백 |
 | 임베딩 | `dragonkue/BGE-m3-ko`, 배치 16, 정규화, GPU가 있으면 CUDA |
 | 검색 | 사업명을 특정할 수 있으면 해당 사업만, 아니면 전체 문서 |
@@ -27,7 +27,7 @@
 - `rfp_rag/data.py`: 벤치마크 검증, 문서·표 추출, CSV 메타데이터 연결, 청킹
 - `rfp_rag/hwp_parser_fix.py`: 손상된 HWP 하이퍼링크 필드에서 읽기 위치를 전진시키는 파서 보정
 - `rfp_rag/pipeline.py`: 사업 식별, 검색기, RRF, 리랭커, 답변 생성
-- `rfp_rag/evaluation.py`: 문서 Hit/MRR/NDCG, GPT 판정, 의미 유사도, 문서 길이별 MRR
+- `rfp_rag/evaluation.py`: 청크 Hit/Recall/MRR/NDCG, 근거 문장 포함률, GPT 판정, 의미 유사도, 원문 길이별 청크 MRR
 - `rfp_rag/ragas_eval.py`: RAGAS 세 지표
 - `run.py`: 실행 명령
 
@@ -46,9 +46,13 @@ Colab에서는 먼저 Drive를 마운트합니다. 기본 경로는 원본 노�
 python run.py evaluate --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json --out-dir ./results
 ```
 
-평가에서는 지정한 10개 문서의 질문 30개를 검색과 생성에 각각 사용합니다. 질문 하나가 검색 입력과 생성 입력에 함께 쓰이며, 질문별 답변과 검색 문맥도 30개씩 저장됩니다. 검색 코퍼스는 기존의 100개 문서를 그대로 사용합니다. 문항 수를 줄이는 옵션은 없습니다.
+평가에서는 100개 문서의 질문 300개를 검색과 생성에 각각 사용합니다. 질문 하나가 검색 입력과 생성 입력에 함께 쓰이며, 질문별 답변과 검색 문맥도 300개씩 저장됩니다. 검색 코퍼스도 100개 문서 전체를 사용합니다. 문항 수를 줄이는 옵션은 없습니다.
 
-`evaluate`는 기본 지표와 RAGAS를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 30개 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다. 이전에 GPT 모델로 저장한 실행 설정도 이 명령에서는 Gemini 기본값으로 전환됩니다.
+검색 평가는 리랭커가 정렬한 **청크 순위**에서 `chunk_hit_at_1`, `chunk_hit_at_5`, `chunk_recall_at_5`, `chunk_mrr`, `chunk_mrr_at_5`, `chunk_ndcg_at_5`를 계산합니다. 평가 JSON에는 현재 700/100 청킹의 정답 청크 ID가 없으므로, 각 문항의 `evidence` 문장을 같은 원문 파일의 청크 본문에 대조해 근거 청크 후보를 만듭니다. 이 점수는 **근거 문장 일치 기반의 임시 정답 청크**를 사용한 결과이며, 사람이 검증한 정답 청크 라벨과 같다고 간주하면 안 됩니다. 공백과 유니코드 표기만 정규화해 일치 여부를 확인합니다.
+
+근거 문장 중 하나라도 원문 청크에 연결되지 않으면 해당 문항의 청크 Hit/Recall/MRR/NDCG는 빈칸으로 저장합니다. `chunk_evidence_aligned`와 `evidence_quote_aligned_count`로 해당 문항을 확인하고, `chunk_evidence_alignment.jsonl`에서 연결되지 않은 근거 문장을 볼 수 있습니다. `evidence_quote_recall_in_context`는 실제 답변에 전달한 최종 6개 청크가 근거 문장을 얼마나 포함하는지 나타냅니다. 문서 길이별 `mrr_by_length.csv`의 평균도 이제 청크 MRR이며, 함께 표시되는 `aligned_question_count`로 평균에 포함된 문항 수를 확인할 수 있습니다.
+
+`evaluate`는 300개 답변 생성, GPT 판정, RAGAS 평가를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 300개 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다. 이전에 GPT 모델로 저장한 실행 설정도 이 명령에서는 Gemini 기본값으로 전환됩니다.
 
 ```bash
 python run.py ragas --out-dir ./results
@@ -95,6 +99,6 @@ GOOGLE_API_KEY=
 - 특정 파일을 건너뛰고 나중에 수동으로 합치던 셀을 없앴습니다. 지원 확장자의 파일만 순회하므로 `parsed_results` 폴더가 파일 목록에 섞이지 않습니다. HWP/HWPX를 읽기 전에는 손상된 하이퍼링크 필드에서도 위치를 전진시키도록 파서 메서드를 현재 프로세스에 적용합니다. 원본 문서 파일은 수정하지 않습니다.
 - 존재하지 않는 VertexAI 모듈을 `sys.modules`에 가짜로 등록하던 코드를 없앴습니다. RAGAS 0.3.9와 호환되는 LangChain Community 0.3 계열을 설치합니다.
 - 중복된 RAGAS 재실행·임시 점수 재구성 셀을 없앴습니다. 기본 평가 결과를 `results/base_scores.csv`에 저장하고, RAGAS는 그 결과와 `ragas_samples.json`을 읽어 한 번만 실행합니다.
-- 원본의 LangSmith 업로드는 429 저장 제한으로 일부 실행·채점이 기록되지 않았습니다. 기본 평가는 같은 수식과 GPT 판정 문구로 **로컬 CSV에 먼저 저장**합니다. 따라서 LangSmith 웹 실험 기록은 이 버전에서 만들지 않습니다. 검색·답변·평가 지표의 기본 설정은 그대로입니다.
+- 원본의 LangSmith 업로드는 429 저장 제한으로 일부 실행·채점이 기록되지 않았습니다. 평가는 **로컬 CSV에 먼저 저장**합니다. 따라서 LangSmith 웹 실험 기록은 이 버전에서 만들지 않습니다.
 
 생성되는 `base_answers.jsonl`과 `ragas_samples.json`에는 문서 내용과 답변이 들어갑니다. `results/`는 Git에서 제외했습니다. 원본 문서, 평가 JSON, CSV, API 키도 GitHub에 올리지 마세요.

@@ -11,7 +11,8 @@ from unittest.mock import patch
 from rfp_rag.config import RagSettings
 from rfp_rag.data import (EVALUATION_QUESTION_IDS, load_benchmark, normalize_filename, parse_files,
                           select_evaluation_questions)
-from rfp_rag.evaluation import retrieval_scores
+from rfp_rag.evaluation import (build_chunk_evidence_index, match_evidence_chunks,
+                                retrieval_scores, evaluate_questions)
 from rfp_rag.hwp_parser_fix import apply_hwp_parser_fix
 from rfp_rag.pipeline import RagPipeline
 from run import run_ragas
@@ -73,8 +74,9 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(result[0]["evidence_quotes"], ["근거"])
             selected = select_evaluation_questions(list(reversed(result)))
             expected = [f"DOC{document:03d}-Q{question:02d}"
-                        for document in (1, 10, 20, 30, 40, 50, 60, 70, 80, 90)
+                        for document in range(1, 101)
                         for question in range(1, 4)]
+            self.assertEqual(len(selected), 300)
             self.assertEqual([item["id"] for item in selected], expected)
             with self.assertRaises(ValueError):
                 select_evaluation_questions(result[1:])
@@ -84,12 +86,58 @@ class CoreTests(unittest.TestCase):
         ranked = RagPipeline.rrf(docs[:2], docs[1:], 60)
         self.assertEqual([doc.metadata["chunk_id"] for doc in ranked], [2, 1, 3])
 
-    def test_document_ranking_uses_unique_filenames(self):
-        scores = retrieval_scores(["A.pdf", "A.pdf", "B.pdf"], "B.pdf")
-        self.assertEqual(scores["document_hit_at_1"], 0)
-        self.assertEqual(scores["document_hit_at_5"], 1)
-        self.assertEqual(scores["document_mrr"], 0.5)
-        self.assertAlmostEqual(scores["document_ndcg_at_5"], 1 / math.log2(3))
+    def test_chunk_ranking_scores_relevant_chunk_ids(self):
+        scores = retrieval_scores([3, 2, 4, 1], {1, 2})
+        self.assertEqual(scores["chunk_hit_at_1"], 0)
+        self.assertEqual(scores["chunk_hit_at_5"], 1)
+        self.assertEqual(scores["chunk_recall_at_5"], 1)
+        self.assertEqual(scores["chunk_mrr"], 0.5)
+        expected_dcg = 1 / math.log2(3) + 1 / math.log2(5)
+        self.assertAlmostEqual(scores["chunk_ndcg_at_5"], expected_dcg / (1 + 1 / math.log2(3)))
+
+    def test_evidence_quotes_match_only_the_correct_source(self):
+        chunks = [
+            SimpleNamespace(page_content="복수의결권 주식 발행 보고", metadata={"파일명": "원문.hwp", "chunk_id": 1}),
+            SimpleNamespace(page_content="다른 내용", metadata={"파일명": "원문.hwp", "chunk_id": 2}),
+            SimpleNamespace(page_content="복수의결권 주식 발행 보고", metadata={"파일명": "다른문서.pdf", "chunk_id": 3}),
+        ]
+        index = build_chunk_evidence_index(chunks)
+        item = {"id": "Q1", "source_filename": "원문.hwp",
+                "evidence_quotes": ["복수의결권주식 발행 보고", "원문에 없는 문장"]}
+        matches = match_evidence_chunks(item, index)
+        self.assertEqual(matches, [{1}, set()])
+        self.assertFalse(all(matches))
+
+    def test_evaluation_writes_chunk_scores_and_leaves_unaligned_scores_blank(self):
+        class FakeEmbeddings:
+            def embed_documents(self, texts):
+                return [[1.0, 0.0] for _ in texts]
+
+        chunk = SimpleNamespace(
+            page_content="확인된 근거", metadata={"파일명": "원문.hwp", "chunk_id": 7},
+        )
+        record = {
+            "answer": "답변: 확인된 근거", "contexts": [chunk.page_content],
+            "chunk_ids": [7], "ranked_chunk_ids": [7],
+            "retrieval_time_ms": 12.0,
+        }
+        pipeline = SimpleNamespace(
+            chunks=[chunk], settings=RagSettings(), embeddings=FakeEmbeddings(),
+            answer=lambda _: record,
+        )
+        judge = SimpleNamespace(score=lambda *_: (1.0, "일치"))
+        item = {
+            "id": "Q1", "document_id": "DOC001", "project": "사업", "source_filename": "원문.hwp",
+            "source_length_chars": 100, "query": "질문", "reference": "확인된 근거",
+            "evidence_quotes": ["확인된 근거", "누락된 근거"],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            scores, _ = evaluate_questions(pipeline, [item], Path(directory), judge=judge)
+            self.assertFalse(scores.loc[0, "chunk_evidence_aligned"])
+            self.assertTrue(math.isnan(scores.loc[0, "chunk_mrr"]))
+            self.assertEqual(scores.loc[0, "evidence_quote_recall_in_context"], 0.5)
+            self.assertNotIn("document_mrr", scores)
+            self.assertTrue((Path(directory) / "chunk_evidence_alignment.jsonl").is_file())
 
     def test_project_routing_matches_full_title(self):
         document = SimpleNamespace(
@@ -128,7 +176,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(calls[0]["model"], "claude-haiku-4-5-20251001")
         self.assertEqual(calls[0]["max_tokens"], 4096)
 
-    def test_ragas_uses_gemini_for_only_the_selected_30_questions(self):
+    def test_ragas_uses_gemini_for_all_300_questions(self):
         calls = []
         module = ModuleType("langchain_google_genai")
 
@@ -154,7 +202,7 @@ class CoreTests(unittest.TestCase):
             run_ragas(samples, ids, FakeScores(), RagSettings(), Path("results"))
             self.assertEqual(evaluate.call_args.args[0], samples)
             self.assertEqual(evaluate.call_args.args[1], ids)
-            with self.assertRaisesRegex(ValueError, "30개"):
+            with self.assertRaisesRegex(ValueError, "300개"):
                 run_ragas(samples[:-1], ids[:-1], FakeScores(), RagSettings(), Path("results"))
         self.assertEqual(calls[0]["model"], "gemini-3.1-flash-lite")
         self.assertEqual(calls[0]["timeout"], 300)

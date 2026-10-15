@@ -92,7 +92,7 @@ def run_ragas(samples, ids, base_scores, settings, out_dir):
     from rfp_rag.data import EVALUATION_QUESTION_IDS
 
     if ids != list(EVALUATION_QUESTION_IDS) or len(samples) != len(ids):
-        raise ValueError("RAGAS 입력은 지정한 10개 문서의 질문 30개여야 합니다.")
+        raise ValueError("RAGAS 입력은 100개 문서의 질문 300개여야 합니다.")
     if base_scores["id"].tolist() != ids:
         raise ValueError("RAGAS 입력과 기본 평가의 질문 ID 또는 순서가 다릅니다.")
     require_api_key("GOOGLE_API_KEY")
@@ -174,14 +174,19 @@ def main():
     from rfp_rag.data import select_evaluation_questions
 
     items = select_evaluation_questions(items)
-    print(f"평가 질문: {len(items)}문항 / 문서 ID: "
-          f"{', '.join(dict.fromkeys(item['document_id'] for item in items))}")
+    print(f"평가 질문: {len(items)}문항 / 문서: "
+          f"{len(set(item['document_id'] for item in items))}개")
     from rfp_rag.evaluation import evaluate_questions
 
     scores, samples = evaluate_questions(pipeline, items, args.out_dir)
     (args.out_dir / "run_config.json").write_text(
         json.dumps(settings.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    aligned = int(scores["chunk_evidence_aligned"].sum())
+    print(f"근거 문장이 청크에 모두 연결된 문항: {aligned}/{len(scores)}")
+    if aligned < len(scores):
+        print("연결되지 않은 문항의 청크 Hit/Recall/MRR/NDCG는 빈칸입니다. "
+              "chunk_evidence_alignment.jsonl에서 근거별 상태를 확인하세요.")
     print("기본 평가 평균:\n", scores.select_dtypes("number").mean().to_string())
     if not args.skip_ragas:
         run_ragas(samples, [item["id"] for item in items], scores, settings, args.out_dir)

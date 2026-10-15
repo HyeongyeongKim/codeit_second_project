@@ -17,7 +17,7 @@ METADATA_COLUMNS = (
     "공고 번호", "공고 차수", "사업명", "사업 금액", "발주 기관",
     "공개 일자", "입찰 참여 시작일", "입찰 참여 마감일", "파일명",
 )
-EVALUATION_DOCUMENT_NUMBERS = (1, 10, 20, 30, 40, 50, 60, 70, 80, 90)
+EVALUATION_DOCUMENT_NUMBERS = tuple(range(1, 101))
 EVALUATION_QUESTION_IDS = tuple(
     f"DOC{document_number:03d}-Q{question_number:02d}"
     for document_number in EVALUATION_DOCUMENT_NUMBERS
@@ -81,7 +81,7 @@ def load_benchmark(path: Path) -> list[dict[str, Any]]:
 
 
 def select_evaluation_questions(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Use three questions from each of the ten requested documents, in ID order."""
+    """Use all three questions from every one of the 100 documents, in ID order."""
     by_id = {item["id"]: item for item in items}
     selected = []
     for question_id in EVALUATION_QUESTION_IDS:
