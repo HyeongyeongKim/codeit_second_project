@@ -12,7 +12,7 @@ from rfp_rag.config import RagSettings
 from rfp_rag.data import (EVALUATION_QUESTION_IDS, load_benchmark, normalize_filename, parse_files,
                           prepare_corpus, select_evaluation_questions)
 from rfp_rag.evaluation import (build_chunk_evidence_index, match_evidence_chunks,
-                                retrieval_scores, evaluate_questions)
+                                retrieval_scores, evaluate_questions, GeminiJudge)
 from rfp_rag.hwp_parser_fix import apply_hwp_parser_fix
 from rfp_rag.pipeline import RagPipeline
 from run import parse_document_numbers, run_ragas
@@ -136,12 +136,9 @@ class CoreTests(unittest.TestCase):
 
     def test_chunk_ranking_scores_relevant_chunk_ids(self):
         scores = retrieval_scores([3, 2, 4, 1], {1, 2})
-        self.assertEqual(scores["chunk_hit_at_1"], 0)
-        self.assertEqual(scores["chunk_hit_at_5"], 1)
-        self.assertEqual(scores["chunk_recall_at_5"], 1)
-        self.assertEqual(scores["chunk_mrr"], 0.5)
-        expected_dcg = 1 / math.log2(3) + 1 / math.log2(5)
-        self.assertAlmostEqual(scores["chunk_ndcg_at_5"], expected_dcg / (1 + 1 / math.log2(3)))
+        self.assertEqual(scores, {"chunk_hit_at_5": 1.0, "chunk_mrr": 0.5})
+        self.assertEqual(retrieval_scores([3, 4, 5, 6, 7, 2], {2}),
+                         {"chunk_hit_at_5": 0.0, "chunk_mrr": 1 / 6})
 
     def test_evidence_quotes_match_only_the_correct_source(self):
         chunks = [
@@ -157,10 +154,6 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(all(matches))
 
     def test_evaluation_writes_chunk_scores_and_leaves_unaligned_scores_blank(self):
-        class FakeEmbeddings:
-            def embed_documents(self, texts):
-                return [[1.0, 0.0] for _ in texts]
-
         chunk = SimpleNamespace(
             page_content="확인된 근거", metadata={"파일명": "원문.hwp", "chunk_id": 7},
         )
@@ -170,7 +163,7 @@ class CoreTests(unittest.TestCase):
             "retrieval_time_ms": 12.0,
         }
         pipeline = SimpleNamespace(
-            chunks=[chunk], settings=RagSettings(), embeddings=FakeEmbeddings(),
+            chunks=[chunk], settings=RagSettings(),
             answer=lambda _: record,
         )
         judge = SimpleNamespace(score=lambda *_: (1.0, "일치"))
@@ -183,9 +176,36 @@ class CoreTests(unittest.TestCase):
             scores, _ = evaluate_questions(pipeline, [item], Path(directory), judge=judge)
             self.assertFalse(scores.loc[0, "chunk_evidence_aligned"])
             self.assertTrue(math.isnan(scores.loc[0, "chunk_mrr"]))
-            self.assertEqual(scores.loc[0, "evidence_quote_recall_in_context"], 0.5)
+            self.assertTrue(math.isnan(scores.loc[0, "chunk_hit_at_5"]))
+            self.assertEqual(scores.loc[0, "llm_as_judge"], 1)
+            self.assertNotIn("semantic_similarity", scores)
             self.assertNotIn("document_mrr", scores)
             self.assertTrue((Path(directory) / "chunk_evidence_alignment.jsonl").is_file())
+
+    def test_gemini_judge_uses_flash_lite_and_caches_the_score(self):
+        constructor_calls = []
+        prompts = []
+        module = ModuleType("langchain_google_genai")
+
+        class FakeChatGoogleGenerativeAI:
+            def __init__(self, **kwargs):
+                constructor_calls.append(kwargs)
+
+            def invoke(self, prompt):
+                prompts.append(prompt)
+                return SimpleNamespace(content='{"score": 0.75, "reason": "핵심 사실 일치"}')
+
+        module.ChatGoogleGenerativeAI = FakeChatGoogleGenerativeAI
+        with patch.dict("sys.modules", {"langchain_google_genai": module}):
+            judge = GeminiJudge(RagSettings())
+            self.assertEqual(judge.score("질문", "기준", "답변"), (0.75, "핵심 사실 일치"))
+            self.assertEqual(judge.score("질문", "기준", "답변"), (0.75, "핵심 사실 일치"))
+        self.assertEqual(constructor_calls[0]["model"], "gemini-3.1-flash-lite")
+        self.assertEqual(len(prompts), 1)
+
+    def test_gemini_judge_rejects_non_gemini_model(self):
+        with self.assertRaisesRegex(ValueError, "Gemini"):
+            GeminiJudge(RagSettings(judge_model="gpt-5-mini"), client=object())
 
     def test_project_routing_matches_full_title(self):
         document = SimpleNamespace(
@@ -238,7 +258,7 @@ class CoreTests(unittest.TestCase):
                 return SimpleNamespace(tolist=lambda: self_id)
 
         class FakeResult:
-            def select_dtypes(self, kind):
+            def __getitem__(self, keys):
                 return SimpleNamespace(mean=lambda: SimpleNamespace(to_string=lambda: "ok"))
 
         module.ChatGoogleGenerativeAI = FakeChatGoogleGenerativeAI

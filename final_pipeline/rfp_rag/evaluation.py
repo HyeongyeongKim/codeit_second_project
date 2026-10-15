@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import re
 import unicodedata
 from collections import defaultdict
@@ -13,14 +12,8 @@ from pathlib import Path
 from .config import RagSettings
 from .data import normalize_filename
 
-METRIC_KEYS = (
-    "llm_as_judge", "semantic_similarity", "evidence_quote_recall_in_context",
-    "all_evidence_quotes_in_context",
-)
-CHUNK_METRIC_KEYS = (
-    "chunk_hit_at_1", "chunk_hit_at_5", "chunk_recall_at_5",
-    "chunk_mrr", "chunk_mrr_at_5", "chunk_ndcg_at_5",
-)
+METRIC_KEYS = ("llm_as_judge",)
+CHUNK_METRIC_KEYS = ("chunk_hit_at_5", "chunk_mrr")
 
 
 def _normalize_evidence(text: str) -> str:
@@ -62,40 +55,22 @@ def retrieval_scores(ranked_chunk_ids: list[int], relevant_chunk_ids: set[int]) 
         raise ValueError("재순위화된 검색 결과에 중복 청크 ID가 있습니다.")
     rank = next((i for i, chunk_id in enumerate(ranked_chunk_ids, 1)
                  if chunk_id in relevant_chunk_ids), None)
-    top_5 = ranked_chunk_ids[:5]
-    matched_top_5 = sum(chunk_id in relevant_chunk_ids for chunk_id in top_5)
-    dcg = sum(1 / math.log2(i + 1) for i, chunk_id in enumerate(top_5, 1)
-              if chunk_id in relevant_chunk_ids)
-    idcg = sum(1 / math.log2(i + 1) for i in range(1, min(5, len(relevant_chunk_ids)) + 1))
     return {
-        "chunk_hit_at_1": float(rank == 1),
         "chunk_hit_at_5": float(rank is not None and rank <= 5),
-        "chunk_recall_at_5": matched_top_5 / len(relevant_chunk_ids),
         "chunk_mrr": 1 / rank if rank else 0.0,
-        "chunk_mrr_at_5": 1 / rank if rank and rank <= 5 else 0.0,
-        "chunk_ndcg_at_5": dcg / idcg,
     }
 
 
-def cosine_similarity(embeddings, answer: str, reference: str) -> float:
-    import numpy as np
-
-    vectors = np.asarray(embeddings.embed_documents([answer, reference]), dtype=np.float64)
-    if vectors.ndim != 2 or vectors.shape[0] != 2:
-        raise ValueError("임베딩 벡터가 유효하지 않습니다.")
-    norms = np.linalg.norm(vectors, axis=1)
-    if not np.isfinite(vectors).all() or np.any(norms == 0):
-        raise ValueError("임베딩 벡터가 유효하지 않습니다.")
-    cosine = float(np.dot(vectors[0], vectors[1]) / (norms[0] * norms[1]))
-    return max(-1.0, min(1.0, cosine))
-
-
-class GPTJudge:
+class GeminiJudge:
     def __init__(self, settings: RagSettings, client=None):
+        if not settings.judge_model.startswith("gemini-"):
+            raise ValueError("judge_model에는 Gemini 모델 ID를 지정하세요.")
         if client is None:
-            from openai import OpenAI
+            from langchain_google_genai import ChatGoogleGenerativeAI
 
-            client = OpenAI(timeout=180, max_retries=4)
+            client = ChatGoogleGenerativeAI(
+                model=settings.judge_model, temperature=0, timeout=180, max_retries=4,
+            )
         self.settings = settings
         self.client = client
         self.cache = {}
@@ -116,14 +91,13 @@ class GPTJudge:
         if key in self.cache:
             return self.cache[key]
         for attempt in range(3):
-            response = self.client.chat.completions.create(
-                model=self.settings.judge_model,
-                reasoning_effort=self.settings.judge_reasoning_effort,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
-            )
+            response = self.client.invoke(prompt)
             try:
-                graded = json.loads(response.choices[0].message.content or "")
+                content = getattr(response, "content", "")
+                if isinstance(content, list):
+                    content = "".join(block.get("text", "") for block in content
+                                      if isinstance(block, dict))
+                graded = json.loads(content)
                 raw_score = graded["score"]
                 reason = graded["reason"]
                 if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)):
@@ -133,7 +107,7 @@ class GPTJudge:
                     raise ValueError("점수 또는 채점 이유가 유효하지 않습니다.")
             except (ValueError, KeyError, TypeError) as exc:
                 if attempt == 2:
-                    raise RuntimeError("GPT 채점 응답 검증 실패") from exc
+                    raise RuntimeError("Gemini 채점 응답 검증 실패") from exc
                 continue
             self.cache[key] = (score, reason.strip())
             return self.cache[key]
@@ -145,7 +119,7 @@ def evaluate_questions(pipeline, items: list[dict], out_dir: Path, *, judge=None
     import pandas as pd
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    judge = judge or GPTJudge(pipeline.settings)
+    judge = judge or GeminiJudge(pipeline.settings)
     indexed_chunks = build_chunk_evidence_index(pipeline.chunks)
     answers = []
     rows = []
@@ -162,19 +136,13 @@ def evaluate_questions(pipeline, items: list[dict], out_dir: Path, *, judge=None
         relevant_chunk_ids = set().union(*quote_matches)
         retrieval = (retrieval_scores(record["ranked_chunk_ids"], relevant_chunk_ids)
                      if alignment_complete else dict.fromkeys(CHUNK_METRIC_KEYS, None))
-        final_ids = set(record["chunk_ids"])
-        quotes_in_context = sum(bool(matches & final_ids) for matches in quote_matches)
         row = {
             "id": item["id"], "document_id": item["document_id"],
             "project": item["project"], "source_length_chars": item["source_length_chars"],
-            "llm_as_judge": judge_score, "semantic_similarity": cosine_similarity(
-                pipeline.embeddings, answer, item["reference"]
-            ),
+            "llm_as_judge": judge_score,
             "chunk_evidence_aligned": alignment_complete,
             "evidence_quote_count": len(quote_matches),
             "evidence_quote_aligned_count": sum(bool(matches) for matches in quote_matches),
-            "evidence_quote_recall_in_context": quotes_in_context / len(quote_matches),
-            "all_evidence_quotes_in_context": float(quotes_in_context == len(quote_matches)),
             "relevant_chunk_count": len(relevant_chunk_ids),
             **retrieval, "retrieval_time_ms": record["retrieval_time_ms"],
             "judge_reason": judge_reason,
@@ -219,8 +187,7 @@ def _validate_base_scores(frame, items):
     if len(frame) != len(items) or frame["id"].duplicated().any() or set(frame["id"]) != expected_ids:
         raise RuntimeError("평가 결과 문항 수, 중복 또는 ID가 맞지 않습니다.")
     for key in METRIC_KEYS:
-        lower = -1 if key == "semantic_similarity" else 0
-        if key not in frame or frame[key].isna().any() or not frame[key].between(lower, 1).all():
+        if key not in frame or frame[key].isna().any() or not frame[key].between(0, 1).all():
             raise RuntimeError(f"평가 점수 누락 또는 범위 오류: {key}")
     aligned = frame["chunk_evidence_aligned"]
     for key in CHUNK_METRIC_KEYS:

@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument("--final-context-count", type=int, default=6)
     parser.add_argument("--generation-model", default="claude-haiku-4-5-20251001")
     parser.add_argument("--generation-max-tokens", type=int, default=4096)
-    parser.add_argument("--judge-model", default="gpt-5-mini-2025-08-07")
+    parser.add_argument("--judge-model", default="gemini-3.1-flash-lite")
     parser.add_argument("--ragas-model", help="RAGAS 평가용 Gemini 모델 ID. 기본값: gemini-3.1-flash-lite")
     return parser.parse_args()
 
@@ -124,7 +124,9 @@ def run_ragas(samples, ids, base_scores, settings, out_dir):
         max_retries=settings.ragas_max_retries,
     )
     result = evaluate_ragas(samples, ids, base_scores, chat_model, settings, out_dir)
-    print("평균 점수:\n", result.select_dtypes("number").mean().to_string())
+    print("평균 점수:\n", result[[
+        "chunk_hit_at_5", "chunk_mrr", "llm_as_judge", "factual_correctness",
+    ]].mean().to_string())
 
 
 def main():
@@ -145,6 +147,7 @@ def main():
             raise ValueError("ragas 명령은 저장된 실행의 문서 선택을 사용합니다. --document-numbers를 빼세요.")
 
         saved_settings = json.loads((args.out_dir / "run_config.json").read_text(encoding="utf-8"))
+        saved_settings.pop("judge_reasoning_effort", None)  # Older OpenAI judge runs.
         settings = RagSettings(**saved_settings)
         from dataclasses import replace
 
@@ -171,9 +174,7 @@ def main():
     require_api_key("ANTHROPIC_API_KEY" if settings.generation_model.startswith("claude-")
                     else "OPENAI_API_KEY")
     if args.command == "evaluate":
-        require_api_key("OPENAI_API_KEY")  # GPT-5 mini judges the generated answers.
-        if not args.skip_ragas:
-            require_api_key("GOOGLE_API_KEY")
+        require_api_key("GOOGLE_API_KEY")  # Gemini judges answers and, unless skipped, runs RAGAS.
 
     from rfp_rag.data import prepare_corpus
     from rfp_rag.pipeline import RagPipeline
@@ -203,9 +204,11 @@ def main():
     aligned = int(scores["chunk_evidence_aligned"].sum())
     print(f"근거 문장이 청크에 모두 연결된 문항: {aligned}/{len(scores)}")
     if aligned < len(scores):
-        print("연결되지 않은 문항의 청크 Hit/Recall/MRR/NDCG는 빈칸입니다. "
+        print("연결되지 않은 문항의 청크 Hit@5/MRR은 빈칸입니다. "
               "chunk_evidence_alignment.jsonl에서 근거별 상태를 확인하세요.")
-    print("기본 평가 평균:\n", scores.select_dtypes("number").mean().to_string())
+    print("기본 평가 평균:\n", scores[[
+        "chunk_hit_at_5", "chunk_mrr", "llm_as_judge",
+    ]].mean().to_string())
     if not args.skip_ragas:
         run_ragas(samples, [item["id"] for item in items], scores, settings, args.out_dir)
 

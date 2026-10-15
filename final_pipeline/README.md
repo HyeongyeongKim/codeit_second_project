@@ -15,9 +15,10 @@
 | 재순위화 | `Alibaba-NLP/gte-multilingual-reranker-base`, 배치 8, 최종 문맥 6개 |
 | 질문 방식 | 원래 질문을 그대로 검색에 사용 |
 | 답변 생성 | `claude-haiku-4-5-20251001`, 최대 출력 4096토큰 |
-| 답변 판정 | `gpt-5-mini-2025-08-07`로 LLM-as-judge 평가 |
+| 답변 판정 | `gemini-3.1-flash-lite`로 LLM-as-judge 평가 |
 | RAGAS 평가 모델 | `gemini-3.1-flash-lite` |
-| RAGAS | `context_recall`, `faithfulness`, `factual_correctness(mode=f1)`; 작업자 1, 재시도 2, 제한 시간 300초 |
+| 평가 지표 | 청크 `Hit@5`, 청크 `MRR`, `LLM-as-Judge`, `Factual Correctness (F1)` 네 가지 |
+| RAGAS | `factual_correctness(mode=f1)`; 작업자 1, 재시도 2, 제한 시간 300초 |
 
 사용할 문서 번호는 **`rfp_rag/config.py` 맨 위의 `DEFAULT_DOCUMENT_NUMBERS` 한 목록**에서 바꿉니다. 기본값은 `(1, 10, 20, 30, 40, 50, 60, 70, 80, 90)`입니다. 실행할 때만 바꾸려면 아래 `--document-numbers` 옵션을 쓰세요. 이 선택 하나가 문서 파싱, 청킹, 검색 코퍼스와 임베딩, 답변 생성 문항, 검색·생성·RAGAS 평가에 모두 적용됩니다. 모델과 검색 값은 `rfp_rag/config.py` 또는 `run.py` 옵션으로 바꿀 수 있습니다. `--generation-model`에는 Claude 또는 OpenAI 모델 ID를 지정할 수 있습니다. 다른 제공자를 쓴다면 `RagPipeline`에 `embeddings=`, `chat_model=`, `reranker=` 객체를 주입할 수 있습니다.
 
@@ -27,8 +28,8 @@
 - `rfp_rag/data.py`: 벤치마크 검증, 문서·표 추출, CSV 메타데이터 연결, 청킹
 - `rfp_rag/hwp_parser_fix.py`: 손상된 HWP 하이퍼링크 필드에서 읽기 위치를 전진시키는 파서 보정
 - `rfp_rag/pipeline.py`: 사업 식별, 검색기, RRF, 리랭커, 답변 생성
-- `rfp_rag/evaluation.py`: 청크 Hit/Recall/MRR/NDCG, 근거 문장 포함률, GPT 판정, 의미 유사도, 원문 길이별 청크 MRR
-- `rfp_rag/ragas_eval.py`: RAGAS 세 지표
+- `rfp_rag/evaluation.py`: 청크 Hit@5·MRR, Gemini 판정, 원문 길이별 청크 MRR
+- `rfp_rag/ragas_eval.py`: RAGAS Factual Correctness (F1)
 - `run.py`: 실행 명령
 
 ## 실행
@@ -54,11 +55,11 @@ python run.py evaluate --document-numbers 1,10,20,30,40,50,60,70,80,90 --data-di
 
 전체 100개 문서와 300문항을 다시 사용하려면 `--document-numbers all`을 지정하세요. 선택한 번호는 `run_config.json`에 저장되며, 나중에 `ragas` 명령을 실행해도 같은 문항을 사용합니다. 각 실행의 결과는 서로 다른 `--out-dir`에 저장하세요.
 
-검색 평가는 리랭커가 정렬한 **청크 순위**에서 `chunk_hit_at_1`, `chunk_hit_at_5`, `chunk_recall_at_5`, `chunk_mrr`, `chunk_mrr_at_5`, `chunk_ndcg_at_5`를 계산합니다. 평가 JSON에는 현재 700/100 청킹의 정답 청크 ID가 없으므로, 각 문항의 `evidence` 문장을 같은 원문 파일의 청크 본문에 대조해 근거 청크 후보를 만듭니다. 이 점수는 **근거 문장 일치 기반의 임시 정답 청크**를 사용한 결과이며, 사람이 검증한 정답 청크 라벨과 같다고 간주하면 안 됩니다. 공백과 유니코드 표기만 정규화해 일치 여부를 확인합니다.
+검색 평가는 리랭커가 정렬한 **청크 순위**에서 `chunk_hit_at_5`와 `chunk_mrr`을 계산합니다. MRR은 첫 정답 청크의 전체 검색 순위의 역수입니다. 생성 평가는 Gemini의 `llm_as_judge`와 RAGAS의 `factual_correctness` (F1)를 사용합니다. 평가 JSON에는 현재 700/100 청킹의 정답 청크 ID가 없으므로, 각 문항의 `evidence` 문장을 같은 원문 파일의 청크 본문에 대조해 근거 청크 후보를 만듭니다. 이 점수는 **근거 문장 일치 기반의 임시 정답 청크**를 사용한 결과이며, 사람이 검증한 정답 청크 라벨과 같다고 간주하면 안 됩니다. 공백과 유니코드 표기만 정규화해 일치 여부를 확인합니다.
 
-근거 문장 중 하나라도 원문 청크에 연결되지 않으면 해당 문항의 청크 Hit/Recall/MRR/NDCG는 빈칸으로 저장합니다. `chunk_evidence_aligned`와 `evidence_quote_aligned_count`로 해당 문항을 확인하고, `chunk_evidence_alignment.jsonl`에서 연결되지 않은 근거 문장을 볼 수 있습니다. `evidence_quote_recall_in_context`는 실제 답변에 전달한 최종 6개 청크가 근거 문장을 얼마나 포함하는지 나타냅니다. 문서 길이별 `mrr_by_length.csv`의 평균도 이제 청크 MRR이며, 함께 표시되는 `aligned_question_count`로 평균에 포함된 문항 수를 확인할 수 있습니다.
+근거 문장 중 하나라도 원문 청크에 연결되지 않으면 해당 문항의 청크 Hit@5와 MRR은 빈칸으로 저장합니다. `chunk_evidence_aligned`와 `evidence_quote_aligned_count`로 해당 문항을 확인하고, `chunk_evidence_alignment.jsonl`에서 연결되지 않은 근거 문장을 볼 수 있습니다. 문서 길이별 `mrr_by_length.csv`의 평균도 청크 MRR이며, 함께 표시되는 `aligned_question_count`로 평균에 포함된 문항 수를 확인할 수 있습니다. `all_scores.csv`에는 네 지표가 문항별로 저장됩니다.
 
-`evaluate`는 선택한 문항의 답변 생성, GPT 판정, RAGAS 평가를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다. 이전에 GPT 모델로 저장한 실행 설정도 이 명령에서는 Gemini 기본값으로 전환됩니다.
+`evaluate`는 선택한 문항의 답변 생성, Gemini 판정, RAGAS 평가를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다. 이전에 GPT 모델로 저장한 실행 설정도 이 명령에서는 Gemini 기본값으로 전환됩니다.
 
 ```bash
 python run.py ragas --out-dir ./results
@@ -93,12 +94,12 @@ GOOGLE_API_KEY=
 | 키 이름 | 쓰는 곳 | 필요한 명령 |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Claude Haiku 4.5 답변 생성 | `answer`, `evaluate` |
-| `OPENAI_API_KEY` | GPT-5 mini 답변 판정(LLM-as-judge) | `evaluate` |
-| `GOOGLE_API_KEY` | Gemini 3.1 Flash-Lite RAGAS 평가 | `evaluate`(RAGAS 포함), `ragas` |
+| `OPENAI_API_KEY` | OpenAI 모델을 답변 생성 모델로 바꿨을 때만 사용 | OpenAI 생성 모델을 지정한 `answer`, `evaluate` |
+| `GOOGLE_API_KEY` | Gemini 3.1 Flash-Lite 답변 판정과 RAGAS 평가 | `evaluate`, `ragas` |
 
 기존 환경 변수 값이 있으면 그 값을 우선 사용합니다. Colab에서는 `final_pipeline/.env`에 키를 넣거나 보안 비밀(Secrets)을 사용할 수 있습니다. GitHub Actions에서 실행하는 경우에는 저장소의 **Settings → Secrets and variables → Actions**에 등록하고 워크플로에서 환경 변수로 전달해야 합니다. GitHub에 등록한 비밀은 Colab으로 자동 전달되지 않습니다.
 
-`evaluate --skip-ragas`에는 `GOOGLE_API_KEY`가 필요하지 않습니다. 저장된 결과에 `ragas`만 실행할 때는 `GOOGLE_API_KEY`만 필요합니다.
+`evaluate --skip-ragas`도 Gemini 답변 판정을 하므로 `GOOGLE_API_KEY`가 필요합니다. 저장된 결과에 `ragas`만 실행할 때도 `GOOGLE_API_KEY`만 필요합니다.
 
 ## 제거한 오류 대응 코드
 

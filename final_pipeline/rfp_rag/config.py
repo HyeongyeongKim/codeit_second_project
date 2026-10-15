@@ -29,8 +29,7 @@ class RagSettings:
     generation_max_tokens: int = 4096
     generation_timeout: int = 180
     generation_retries: int = 4
-    judge_model: str = "gpt-5-mini-2025-08-07"
-    judge_reasoning_effort: str = "low"
+    judge_model: str = "gemini-3.1-flash-lite"
     ragas_model: str = "gemini-3.1-flash-lite"
     ragas_max_workers: int = 1
     ragas_max_retries: int = 2
