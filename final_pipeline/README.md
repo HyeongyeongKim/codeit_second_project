@@ -64,7 +64,9 @@ python run.py answer --question "사업명에 관한 입찰 참가 자격은?" -
 
 ## API 키 넣는 곳
 
-`run.py`와 같은 폴더인 `final_pipeline/.env`에 키를 넣으세요. 이 파일은 `.gitignore`에 등록되어 GitHub에 올라가지 않으며, 실행할 때 자동으로 읽습니다. GitHub에서 코드를 새로 내려받았다면 `.env.example`을 `.env`로 복사한 뒤 빈 값만 채우면 됩니다.
+VS Code에서 저장소를 연 뒤, 터미널을 `final_pipeline` 폴더에서 열어 아래 명령으로 `.env`를 만드세요. `run.py`가 같은 폴더의 `.env`를 실행할 때 자동으로 읽습니다. 팀원도 각자 자신의 컴퓨터에서 같은 작업을 하고 자신의 키를 입력합니다. `.env`는 `.gitignore`에 등록되어 GitHub에 올라가지 않습니다.
+
+**GitHub 웹사이트에서 `.env.example`을 편집해 실제 키를 넣지 마세요.** Secret scanning 경고가 나오면 우회하지 말고 편집 내용에서 키를 지우세요. `.env.example`은 빈 양식으로 유지합니다.
 
 ```powershell
 Copy-Item .env.example .env
