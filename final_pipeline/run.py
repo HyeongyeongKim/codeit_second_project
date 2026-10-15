@@ -20,7 +20,7 @@ def parse_args():
     parser.add_argument("--aliases", type=Path, help="선택 사항: {줄임말: [발주 기관, 정식 사업명]} JSON")
     parser.add_argument("--question", help="answer 명령에 사용할 질문")
     parser.add_argument("--refresh-cache", action="store_true", help="기존 문서 추출 캐시를 다시 생성")
-    parser.add_argument("--limit", type=int, help="평가할 앞쪽 문항 수. 기본값은 전체 300문항")
+    parser.add_argument("--limit", type=int, help="선택한 30문항 중 앞쪽 문항 수(실행 확인용)")
     parser.add_argument("--skip-ragas", action="store_true", help="기본 평가만 실행하고 RAGAS는 나중에 실행")
     parser.add_argument("--chunk-size", type=int, default=700)
     parser.add_argument("--chunk-overlap", type=int, default=100)
@@ -31,8 +31,8 @@ def parse_args():
     parser.add_argument("--rrf-k", type=int, default=60)
     parser.add_argument("--reranker-model", default="Alibaba-NLP/gte-multilingual-reranker-base")
     parser.add_argument("--final-context-count", type=int, default=6)
-    parser.add_argument("--search-method", choices=("basic", "hyde"), default="basic")
-    parser.add_argument("--generation-model", default="gpt-5-mini-2025-08-07")
+    parser.add_argument("--generation-model", default="claude-haiku-4-5-20251001")
+    parser.add_argument("--generation-max-tokens", type=int, default=4096)
     parser.add_argument("--judge-model", default="gpt-5-mini-2025-08-07")
     parser.add_argument("--ragas-model", help="RAGAS 평가 모델. 기본값: gpt-5-mini-2025-08-07")
     return parser.parse_args()
@@ -49,8 +49,8 @@ def settings_from_args(args) -> RagSettings:
         rrf_k=args.rrf_k,
         reranker_model=args.reranker_model,
         final_context_count=args.final_context_count,
-        search_method=args.search_method,
         generation_model=args.generation_model,
+        generation_max_tokens=args.generation_max_tokens,
         judge_model=args.judge_model,
         ragas_model=args.ragas_model or "gpt-5-mini-2025-08-07",
     )
@@ -58,18 +58,18 @@ def settings_from_args(args) -> RagSettings:
     return settings
 
 
-def require_openai_key() -> None:
-    if not os.getenv("OPENAI_API_KEY"):
+def require_api_key(name: str) -> None:
+    if not os.getenv(name):
         try:
             from google.colab import userdata
 
-            value = userdata.get("OPENAI_API_KEY")
+            value = userdata.get(name)
         except Exception:
             value = None
         if value:
-            os.environ["OPENAI_API_KEY"] = value
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY를 환경 변수 또는 Colab 보안 비밀에 설정하세요.")
+            os.environ[name] = value
+    if not os.getenv(name):
+        raise RuntimeError(f"{name}를 환경 변수 또는 Colab 보안 비밀에 설정하세요.")
 
 
 def load_aliases(path: Path | None) -> dict[str, tuple[str, str]]:
@@ -105,7 +105,6 @@ def main():
     if args.command == "show-config":
         print(json.dumps(settings.to_dict(), ensure_ascii=False, indent=2))
         return
-    require_openai_key()
     # The notebook hit LangSmith's 429 ingest limit. Scoring is local; no tracing is needed.
     os.environ["LANGSMITH_TRACING"] = "false"
     os.environ["LANGCHAIN_TRACING_V2"] = "false"
@@ -114,6 +113,7 @@ def main():
     if args.command == "ragas":
         import pandas as pd
 
+        require_api_key("OPENAI_API_KEY")
         saved_settings = json.loads((args.out_dir / "run_config.json").read_text(encoding="utf-8"))
         settings = RagSettings(**saved_settings)
         if args.ragas_model:
@@ -124,6 +124,11 @@ def main():
         base_scores = pd.read_csv(args.out_dir / "base_scores.csv", encoding="utf-8-sig")
         run_ragas(samples, base_scores["id"].tolist(), base_scores, settings, args.out_dir)
         return
+
+    require_api_key("ANTHROPIC_API_KEY" if settings.generation_model.startswith("claude-")
+                    else "OPENAI_API_KEY")
+    if args.command == "evaluate":
+        require_api_key("OPENAI_API_KEY")  # GPT-5 mini judges the answers and RAGAS samples.
 
     from rfp_rag.data import prepare_corpus
     from rfp_rag.pipeline import RagPipeline
@@ -142,10 +147,15 @@ def main():
         print(record["answer"])
         return
 
+    from rfp_rag.data import select_evaluation_questions
+
+    items = select_evaluation_questions(items)
     if args.limit is not None:
         if not 1 <= args.limit <= len(items):
-            raise ValueError("--limit는 1~300이어야 합니다.")
+            raise ValueError("--limit는 1~30이어야 합니다.")
         items = items[:args.limit]
+    print(f"평가 질문: {len(items)}문항 / 문서 ID: "
+          f"{', '.join(dict.fromkeys(item['document_id'] for item in items))}")
     from rfp_rag.evaluation import evaluate_questions
 
     scores, samples = evaluate_questions(pipeline, items, args.out_dir)

@@ -1,23 +1,24 @@
 # RFP RAG 최종 파이프라인 (Python 모듈)
 
-제공된 `RFP_최종_Dense_KiwiBM25_리랭커_GPT5mini (3) (1).ipynb`의 실행 경로를 Python 파일로 분리했습니다. 문서 파싱, 사업 식별, Dense+Kiwi BM25 검색, RRF, 재순위화, GPT-5 mini 답변 및 동일한 평가 지표를 유지합니다.
+제공된 `RFP_최종_Dense_KiwiBM25_리랭커_GPT5mini (3) (1).ipynb`의 실행 경로를 Python 파일로 분리했습니다. 문서 파싱, 사업 식별, Dense+Kiwi BM25 검색, RRF, 재순위화와 평가 지표를 유지하면서 답변 생성 모델을 Claude Haiku 4.5로 변경했습니다.
 
 ## 기본 설정
 
 | 항목 | 값 |
 |---|---|
-| 입력 | DEV v1.1의 100개 문서·300문항, PDF/HWP/HWPX의 표 Markdown 추출 |
+| 입력 | DEV v1.1의 100개 문서 중 `DOC001`, `DOC010`, `DOC020`, `DOC030`, `DOC040`, `DOC050`, `DOC060`, `DOC070`, `DOC080`, `DOC090`의 질문 각 3개, 총 30문항 평가. PDF/HWP/HWPX의 표 Markdown 추출 |
 | 청킹 | 700자, 겹침 100자, 구분자 `\n\n` → `\n` → 공백 |
 | 임베딩 | `dragonkue/BGE-m3-ko`, 배치 16, 정규화, GPU가 있으면 CUDA |
 | 검색 | 사업명을 특정할 수 있으면 해당 사업만, 아니면 전체 문서 |
 | 후보 | Dense 20개 + Kiwi BM25 20개 |
 | 결합 | RRF `k=60` |
 | 재순위화 | `Alibaba-NLP/gte-multilingual-reranker-base`, 배치 8, 최종 문맥 6개 |
-| 질문 방식 | 원래 질문(`basic`), HyDE는 선택 가능 |
-| 생성·GPT 평가·RAGAS 평가 | 모두 `gpt-5-mini-2025-08-07` (각각 별도로 변경 가능) |
-| RAGAS | `context_recall`, `faithfulness`, `factual_correctness(mode=f1)`; GPT-5 mini, 작업자 1, 재시도 2, 제한 시간 300초 |
+| 질문 방식 | 원래 질문을 그대로 검색에 사용 |
+| 답변 생성 | `claude-haiku-4-5-20251001`, 최대 출력 4096토큰 |
+| 답변 판정·RAGAS 평가 | 비교 기준을 유지하도록 `gpt-5-mini-2025-08-07` 사용 |
+| RAGAS | `context_recall`, `faithfulness`, `factual_correctness(mode=f1)`; 작업자 1, 재시도 2, 제한 시간 300초 |
 
-모델과 검색 값을 바꾸려면 `rfp_rag/config.py`를 수정하거나 `run.py`의 옵션을 사용하세요. 다른 모델 제공자를 쓴다면 `RagPipeline`에 `embeddings=`, `chat_model=`, `reranker=` 객체를 주입할 수 있습니다. 기본 실행은 위 표와 같습니다.
+모델과 검색 값을 바꾸려면 `rfp_rag/config.py`를 수정하거나 `run.py`의 옵션을 사용하세요. `--generation-model`에는 Claude 또는 OpenAI 모델 ID를 지정할 수 있습니다. 다른 제공자를 쓴다면 `RagPipeline`에 `embeddings=`, `chat_model=`, `reranker=` 객체를 주입할 수 있습니다. 기본 실행은 위 표와 같습니다.
 
 ## 파일 구조
 
@@ -38,19 +39,19 @@ python -m pip install -r requirements.txt
 python run.py show-config
 ```
 
-`OPENAI_API_KEY`를 환경 변수나 Colab 보안 비밀에 설정합니다. Colab에서는 먼저 Drive를 마운트합니다. 기본 경로는 원본 노트북과 같은 `/content/drive/MyDrive/data`, `/content/drive/MyDrive/data_list.csv`, `/content/drive/MyDrive/dev_benchmark_v1.1.json`입니다. 로컬에서는 아래처럼 경로를 지정합니다.
+`ANTHROPIC_API_KEY`를 환경 변수나 Colab 보안 비밀에 설정합니다. `evaluate`와 `ragas` 명령은 GPT-5 mini로 평가하므로 `OPENAI_API_KEY`도 필요합니다. Colab에서는 먼저 Drive를 마운트합니다. 기본 경로는 원본 노트북과 같은 `/content/drive/MyDrive/data`, `/content/drive/MyDrive/data_list.csv`, `/content/drive/MyDrive/dev_benchmark_v1.1.json`입니다. 로컬에서는 아래처럼 경로를 지정합니다.
 
 ```bash
 python run.py evaluate --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json --out-dir ./results
 ```
 
-먼저 적은 수의 문항으로 실행을 확인할 수 있습니다. 이때도 코퍼스는 동일한 100개 문서로 만듭니다.
+평가에서는 지정한 10개 문서의 질문 30개만 사용합니다. 검색 코퍼스는 기존의 100개 문서를 그대로 사용합니다. 먼저 적은 수의 문항으로 실행을 확인하려면 다음처럼 실행합니다.
 
 ```bash
 python run.py evaluate --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json --limit 3 --skip-ragas
 ```
 
-`evaluate`는 기본 지표와 RAGAS를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 300개 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다.
+`evaluate`는 기본 지표와 RAGAS를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 30개 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다.
 
 ```bash
 python run.py ragas --out-dir ./results
@@ -62,7 +63,7 @@ python run.py ragas --out-dir ./results
 python run.py answer --question "사업명에 관한 입찰 참가 자격은?" --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json
 ```
 
-예를 들어 임베딩만 바꾸려면 `--embedding-model BAAI/bge-m3`, 일반 BM25를 비교하려면 `--bm25-mode current`를 사용합니다. 그 외 `--chunk-size`, `--chunk-overlap`, `--dense-k`, `--bm25-k`, `--rrf-k`, `--reranker-model`, `--final-context-count`, `--generation-model`, `--judge-model`, `--ragas-model`, `--search-method`를 독립적으로 바꿀 수 있습니다. `ragas` 명령은 저장된 `run_config.json`을 읽어 원래 실행의 설정을 이어받습니다.
+예를 들어 임베딩만 바꾸려면 `--embedding-model BAAI/bge-m3`, 일반 BM25를 비교하려면 `--bm25-mode current`를 사용합니다. 그 외 `--chunk-size`, `--chunk-overlap`, `--dense-k`, `--bm25-k`, `--rrf-k`, `--reranker-model`, `--final-context-count`, `--generation-model`, `--generation-max-tokens`, `--judge-model`, `--ragas-model`을 독립적으로 바꿀 수 있습니다. `ragas` 명령은 저장된 `run_config.json`을 읽어 원래 실행의 설정을 이어받습니다.
 
 ## 제거한 오류 대응 코드
 

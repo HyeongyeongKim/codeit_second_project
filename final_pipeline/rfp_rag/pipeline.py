@@ -10,17 +10,6 @@ from collections import defaultdict
 from .config import RagSettings
 
 
-HYDE_RULES = """너는 RFP에서 관련 문단을 찾기 위한 가상 안내문 작성자야.
-실제 답변이 아니라 검색에 쓸 안내문 1문장만 작성해.
-- 질문의 핵심 주제어를 그대로 포함해.
-- 질문과 관계없는 다른 사업이나 항목으로 이동하지 마.
-- 확인되지 않은 금액, 날짜, 법률, 자격 조건을 단정하지 마.
-- 제목, 목록, 따옴표, 추가 설명을 쓰지 마.
-
-예시:
-질문: 이 사업의 입찰 참여 자격은 무엇인가요?
-가상 안내문: 이 사업의 입찰 참여 자격에 관한 조건이 안내되어 있다."""
-
 ANSWER_RULES = """
 너는 RFP 문서의 사실 확인 담당자다. 아래 <문서>에 적힌 내용만으로 <질문>에 답한다.
 
@@ -31,7 +20,7 @@ ANSWER_RULES = """
 4. 직접 인용할 근거가 없는 항목은 추측하지 말고 "제공된 문서에서 확인할 수 없습니다"라고 쓴다.
 5. 금액, 기간, 날짜, 비율, 인력, 제출 조건은 문서의 표현을 그대로 옮긴다. 계산하거나 일반적인 관행으로 빈칸을 채우지 않는다.
 6. 답변의 각 사실 바로 뒤에 근거 문서 번호 [1]처럼 붙인다.
-7. HyDE 검색 문장과 모델의 사전 지식은 근거로 사용하지 않는다.
+7. 모델의 사전 지식은 근거로 사용하지 않는다.
 
 출력 형식:
 근거:
@@ -106,13 +95,23 @@ class RagPipeline:
                                "normalize_embeddings": settings.normalize_embeddings},
             )
         if chat_model is None:
-            from langchain_openai import ChatOpenAI
+            if settings.generation_model.startswith("claude-"):
+                from langchain_anthropic import ChatAnthropic
 
-            chat_model = ChatOpenAI(
-                model=settings.generation_model,
-                timeout=settings.generation_timeout,
-                max_retries=settings.generation_retries,
-            )
+                chat_model = ChatAnthropic(
+                    model=settings.generation_model,
+                    max_tokens=settings.generation_max_tokens,
+                    timeout=settings.generation_timeout,
+                    max_retries=settings.generation_retries,
+                )
+            else:
+                from langchain_openai import ChatOpenAI
+
+                chat_model = ChatOpenAI(
+                    model=settings.generation_model,
+                    timeout=settings.generation_timeout,
+                    max_retries=settings.generation_retries,
+                )
         if reranker is None:
             from sentence_transformers import CrossEncoder
 
@@ -246,16 +245,7 @@ class RagPipeline:
         ranked = sorted(scores.values(), key=lambda item: item["score"], reverse=True)
         return [item["doc"] for item in ranked]
 
-    def _search_text(self, query, method):
-        if method == "basic":
-            return query
-        if method == "hyde":
-            prompt = f"{HYDE_RULES}\n\n질문: {query}\n가상 안내문:"
-            return _content(self.chat_model.invoke(prompt))
-        raise ValueError(f"지원하지 않는 검색 방식: {method}")
-
-    def retrieve(self, query, *, method=None, bm25_mode=None):
-        method = method or self.settings.search_method
+    def retrieve(self, query, *, bm25_mode=None):
         bm25_mode = bm25_mode or self.settings.bm25_mode
         route_started = time.perf_counter()
         try:
@@ -263,13 +253,12 @@ class RagPipeline:
         except ValueError:
             project_key = None  # Original behavior: ambiguous/unknown -> all 100 documents.
         route_seconds = time.perf_counter() - route_started
-        cache_key = (project_key, method, query, bm25_mode)
+        cache_key = (project_key, query, bm25_mode)
         if cache_key in self.retrieval_cache:
             return self.retrieval_cache[cache_key]
         dense, bm25 = self._get_retrievers(project_key, bm25_mode)
         started = time.perf_counter()  # The first index build is excluded, as in the notebook.
-        search_text = self._search_text(query, method)
-        found = self.rrf(dense.invoke(search_text), bm25.invoke(search_text), self.settings.rrf_k)
+        found = self.rrf(dense.invoke(query), bm25.invoke(query), self.settings.rrf_k)
         if not found:
             raise RuntimeError(f"검색 결과가 없습니다: {query}")
         ranking = self.reranker.rank(
@@ -281,15 +270,14 @@ class RagPipeline:
         ranked_sources = list(dict.fromkeys(doc.metadata.get("파일명", "")
                                             for doc in ranked_chunks))
         elapsed_ms = 1000 * (route_seconds + time.perf_counter() - started)
-        result = (project_key, search_text, found, top_contexts, ranked_sources, elapsed_ms)
+        result = (project_key, query, found, top_contexts, ranked_sources, elapsed_ms)
         self.retrieval_cache[cache_key] = result
         return result
 
-    def answer(self, query, *, method=None, bm25_mode=None):
-        method = method or self.settings.search_method
+    def answer(self, query, *, bm25_mode=None):
         bm25_mode = bm25_mode or self.settings.bm25_mode
         project_key, search_text, found, contexts, ranked_sources, elapsed_ms = self.retrieve(
-            query, method=method, bm25_mode=bm25_mode
+            query, bm25_mode=bm25_mode
         )
         context = "\n\n".join(
             f"[{i}] 메타데이터: {doc.metadata}\n본문: {doc.page_content}"
@@ -297,7 +285,7 @@ class RagPipeline:
         )
         prompt = ANSWER_RULES.format(context=context, query=query)
         cache_key = hashlib.sha256(
-            f"{self.settings.generation_model}|{method}|{bm25_mode}|{prompt}".encode("utf-8")
+            f"{self.settings.generation_model}|{bm25_mode}|{prompt}".encode("utf-8")
         ).hexdigest()
         if cache_key in self.answer_cache:
             return dict(self.answer_cache[cache_key], answer_cached=True)

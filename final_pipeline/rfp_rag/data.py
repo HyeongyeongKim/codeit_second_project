@@ -17,6 +17,7 @@ METADATA_COLUMNS = (
     "공고 번호", "공고 차수", "사업명", "사업 금액", "발주 기관",
     "공개 일자", "입찰 참여 시작일", "입찰 참여 마감일", "파일명",
 )
+EVALUATION_DOCUMENT_NUMBERS = (1, 10, 20, 30, 40, 50, 60, 70, 80, 90)
 
 
 def normalize_filename(value: str) -> str:
@@ -72,6 +73,21 @@ def load_benchmark(path: Path) -> list[dict[str, Any]]:
     if len({item["id"] for item in result}) != 300:
         raise ValueError("평가 문항 ID가 중복됩니다.")
     return result
+
+
+def select_evaluation_questions(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Use three questions from each of the ten requested documents, in ID order."""
+    by_id = {item["id"]: item for item in items}
+    selected = []
+    for number in EVALUATION_DOCUMENT_NUMBERS:
+        document_id = f"DOC{number:03d}"
+        for question_number in range(1, 4):
+            question_id = f"{document_id}-Q{question_number:02d}"
+            item = by_id.get(question_id)
+            if item is None or item["document_id"] != document_id:
+                raise ValueError(f"선택한 평가 문항이 없거나 문서 ID가 다릅니다: {question_id}")
+            selected.append(item)
+    return selected
 
 
 def _write_json(path: Path, value: dict) -> None:

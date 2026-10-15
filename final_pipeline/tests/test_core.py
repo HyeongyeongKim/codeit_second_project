@@ -8,7 +8,8 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from rfp_rag.config import RagSettings
-from rfp_rag.data import load_benchmark, normalize_filename, parse_files
+from rfp_rag.data import (load_benchmark, normalize_filename, parse_files,
+                          select_evaluation_questions)
 from rfp_rag.evaluation import retrieval_scores
 from rfp_rag.hwp_parser_fix import apply_hwp_parser_fix
 from rfp_rag.pipeline import RagPipeline
@@ -68,6 +69,13 @@ class CoreTests(unittest.TestCase):
             result = load_benchmark(path)
             self.assertEqual(len(result), 300)
             self.assertEqual(result[0]["evidence_quotes"], ["근거"])
+            selected = select_evaluation_questions(list(reversed(result)))
+            expected = [f"DOC{document:03d}-Q{question:02d}"
+                        for document in (1, 10, 20, 30, 40, 50, 60, 70, 80, 90)
+                        for question in range(1, 4)]
+            self.assertEqual([item["id"] for item in selected], expected)
+            with self.assertRaises(ValueError):
+                select_evaluation_questions(result[1:])
 
     def test_rrf_preserves_dense_first_tie_order_and_deduplicates_chunks(self):
         docs = [SimpleNamespace(metadata={"chunk_id": i}) for i in (1, 2, 3)]
@@ -86,14 +94,37 @@ class CoreTests(unittest.TestCase):
             metadata={"발주 기관": "평택시", "사업명": "평택시 스마트시티 영상감시 시스템", "chunk_id": 0},
             page_content="본문",
         )
-        pipeline = RagPipeline(
-            [document], RagSettings(), embeddings=object(), chat_model=object(),
-            reranker=object(), kiwi=object(),
-        )
+        with patch.object(RagPipeline, "_device", return_value="cpu"):
+            pipeline = RagPipeline(
+                [document], RagSettings(), embeddings=object(), chat_model=object(),
+                reranker=object(), kiwi=object(),
+            )
         self.assertEqual(
             pipeline.identify_project("평택시 스마트시티 영상감시 시스템의 기간은?"),
             ("평택시", "평택시 스마트시티 영상감시 시스템"),
         )
+
+    def test_default_generation_uses_claude_haiku(self):
+        calls = []
+        module = ModuleType("langchain_anthropic")
+
+        class FakeChatAnthropic:
+            def __init__(self, **kwargs):
+                calls.append(kwargs)
+
+        module.ChatAnthropic = FakeChatAnthropic
+        document = SimpleNamespace(
+            metadata={"발주 기관": "기관", "사업명": "사업", "chunk_id": 0},
+            page_content="본문",
+        )
+        with patch.dict("sys.modules", {"langchain_anthropic": module}), \
+                patch.object(RagPipeline, "_device", return_value="cpu"):
+            pipeline = RagPipeline(
+                [document], RagSettings(), embeddings=object(), reranker=object(), kiwi=object(),
+            )
+        self.assertIsInstance(pipeline.chat_model, FakeChatAnthropic)
+        self.assertEqual(calls[0]["model"], "claude-haiku-4-5-20251001")
+        self.assertEqual(calls[0]["max_tokens"], 4096)
 
 
 if __name__ == "__main__":
