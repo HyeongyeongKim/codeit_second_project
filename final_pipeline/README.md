@@ -36,6 +36,8 @@
 
 별도 Python 환경에서 설치합니다. Colab에서도 패키지를 설치한 뒤 Python 스크립트로 실행할 수 있습니다.
 
+Colab에서는 [`RFP_RAG_Colab_실행.ipynb`](RFP_RAG_Colab_실행.ipynb)을 열고 위에서부터 실행하세요. 문서 파싱부터 네 평가 지표까지 모든 실행 코드와 설치 패키지 목록이 노트북 안에 있어 GitHub의 Python 파일을 가져오지 않습니다. 문서 번호와 Drive 경로는 노트북 앞부분의 설정 셀에서 바꾸고, API 키는 Colab 보안 비밀에 등록합니다. 결과는 Drive의 `RFP_RAG_results/`에 저장됩니다.
+
 ```bash
 python -m pip install -r requirements.txt
 python run.py show-config
