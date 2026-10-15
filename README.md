@@ -12,6 +12,7 @@
 
 ## 파일 안내
 
+- [최종 RAG Python 파이프라인](final_pipeline/README.md): Dense + Kiwi BM25 + RRF + 리랭커 + GPT-5 mini 모듈과 실행 방법
 - [실험의 의사결정 흐름](EXPERIMENT_JOURNEY.md): 변경 이유·방법·결과, 충돌하는 기록과 해석 한계
 - [실험 노트북 23개](experiments/README.md): 파일별 설정과 실행 상태
 - [청킹 3종·30문항 실행 결과](CHUNKING_3WAY_RESULTS_2026-10-13.md): 700/100, parent–child, 구조 기반 청킹의 답변·근거·문맥 길이 비교

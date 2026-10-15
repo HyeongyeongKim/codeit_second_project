@@ -1,0 +1,12 @@
+.env
+results/
+data/
+parsed_results/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.csv
+*.jsonl
+ragas_samples.json
+ragas_results.csv
