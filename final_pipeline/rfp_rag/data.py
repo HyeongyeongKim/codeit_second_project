@@ -10,19 +10,25 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .config import RagSettings
+from .config import DEFAULT_DOCUMENT_NUMBERS, RagSettings
 
 SUPPORTED_SUFFIXES = {".pdf", ".hwp", ".hwpx"}
 METADATA_COLUMNS = (
     "공고 번호", "공고 차수", "사업명", "사업 금액", "발주 기관",
     "공개 일자", "입찰 참여 시작일", "입찰 참여 마감일", "파일명",
 )
-EVALUATION_DOCUMENT_NUMBERS = tuple(range(1, 101))
-EVALUATION_QUESTION_IDS = tuple(
-    f"DOC{document_number:03d}-Q{question_number:02d}"
-    for document_number in EVALUATION_DOCUMENT_NUMBERS
-    for question_number in range(1, 4)
-)
+EVALUATION_DOCUMENT_NUMBERS = DEFAULT_DOCUMENT_NUMBERS
+
+
+def evaluation_question_ids(document_numbers) -> tuple[str, ...]:
+    return tuple(
+        f"DOC{document_number:03d}-Q{question_number:02d}"
+        for document_number in document_numbers
+        for question_number in range(1, 4)
+    )
+
+
+EVALUATION_QUESTION_IDS = evaluation_question_ids(EVALUATION_DOCUMENT_NUMBERS)
 
 
 def normalize_filename(value: str) -> str:
@@ -80,11 +86,13 @@ def load_benchmark(path: Path) -> list[dict[str, Any]]:
     return result
 
 
-def select_evaluation_questions(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Use all three questions from every one of the 100 documents, in ID order."""
+def select_evaluation_questions(
+    items: list[dict[str, Any]], document_numbers=EVALUATION_DOCUMENT_NUMBERS,
+) -> list[dict[str, Any]]:
+    """Use all three questions from each selected document, in number order."""
     by_id = {item["id"]: item for item in items}
     selected = []
-    for question_id in EVALUATION_QUESTION_IDS:
+    for question_id in evaluation_question_ids(document_numbers):
         document_id = question_id.split("-", 1)[0]
         item = by_id.get(question_id)
         if item is None or item["document_id"] != document_id:
@@ -213,15 +221,17 @@ def prepare_corpus(data_dir: Path, metadata_csv: Path, benchmark_path: Path,
                    settings: RagSettings, refresh_cache: bool = False):
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-    items = load_benchmark(benchmark_path)
+    settings.validate()
+    items = select_evaluation_questions(load_benchmark(benchmark_path), settings.document_numbers)
     required = {normalize_filename(item["source_filename"]) for item in items}
-    if len(required) != 100:
-        raise ValueError(f"벤치마크의 고유 정답 문서 수가 100개가 아닙니다: {len(required)}")
+    expected_count = len(settings.document_numbers)
+    if len(required) != expected_count:
+        raise ValueError(f"선택한 문서와 정답 문서 수가 다릅니다: {len(required)}/{expected_count}")
     parsed = parse_files(data_dir, required, refresh_cache=refresh_cache)
     documents = load_documents(parsed, metadata_csv)
     sources = {normalize_filename(doc.metadata["파일명"]) for doc in documents}
-    if sources != required or len(documents) != 100:
-        raise ValueError(f"벤치마크 문서 100개가 필요합니다: {len(documents)}개 로드")
+    if sources != required or len(documents) != expected_count:
+        raise ValueError(f"선택한 문서 {expected_count}개 중 {len(documents)}개를 로드했습니다.")
     lengths = {normalize_filename(doc.metadata["파일명"]): len(doc.page_content)
                for doc in documents}
     for item in items:

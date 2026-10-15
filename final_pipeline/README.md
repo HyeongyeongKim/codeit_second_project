@@ -6,7 +6,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 입력 | DEV v1.1의 100개 문서(`DOC001`~`DOC100`)에서 각 3문항씩, 총 300문항을 검색과 답변 생성에 똑같이 사용. 검색 대상도 100개 문서 전체. PDF/HWP/HWPX의 표 Markdown 추출 |
+| 입력 기본값 | DEV v1.1의 `DOC001`, `DOC010`, `DOC020`, `DOC030`, `DOC040`, `DOC050`, `DOC060`, `DOC070`, `DOC080`, `DOC090` 총 10개 문서. 각 3문항씩 30문항 사용. PDF/HWP/HWPX의 표 Markdown 추출 |
 | 청킹 | 700자, 겹침 100자, 구분자 `\n\n` → `\n` → 공백 |
 | 임베딩 | `dragonkue/BGE-m3-ko`, 배치 16, 정규화, GPU가 있으면 CUDA |
 | 검색 | 사업명을 특정할 수 있으면 해당 사업만, 아니면 전체 문서 |
@@ -19,7 +19,7 @@
 | RAGAS 평가 모델 | `gemini-3.1-flash-lite` |
 | RAGAS | `context_recall`, `faithfulness`, `factual_correctness(mode=f1)`; 작업자 1, 재시도 2, 제한 시간 300초 |
 
-모델과 검색 값을 바꾸려면 `rfp_rag/config.py`를 수정하거나 `run.py`의 옵션을 사용하세요. `--generation-model`에는 Claude 또는 OpenAI 모델 ID를 지정할 수 있습니다. 다른 제공자를 쓴다면 `RagPipeline`에 `embeddings=`, `chat_model=`, `reranker=` 객체를 주입할 수 있습니다. 기본 실행은 위 표와 같습니다.
+사용할 문서 번호는 **`rfp_rag/config.py` 맨 위의 `DEFAULT_DOCUMENT_NUMBERS` 한 목록**에서 바꿉니다. 기본값은 `(1, 10, 20, 30, 40, 50, 60, 70, 80, 90)`입니다. 실행할 때만 바꾸려면 아래 `--document-numbers` 옵션을 쓰세요. 이 선택 하나가 문서 파싱, 청킹, 검색 코퍼스와 임베딩, 답변 생성 문항, 검색·생성·RAGAS 평가에 모두 적용됩니다. 모델과 검색 값은 `rfp_rag/config.py` 또는 `run.py` 옵션으로 바꿀 수 있습니다. `--generation-model`에는 Claude 또는 OpenAI 모델 ID를 지정할 수 있습니다. 다른 제공자를 쓴다면 `RagPipeline`에 `embeddings=`, `chat_model=`, `reranker=` 객체를 주입할 수 있습니다.
 
 ## 파일 구조
 
@@ -46,13 +46,19 @@ Colab에서는 먼저 Drive를 마운트합니다. 기본 경로는 원본 노�
 python run.py evaluate --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json --out-dir ./results
 ```
 
-평가에서는 100개 문서의 질문 300개를 검색과 생성에 각각 사용합니다. 질문 하나가 검색 입력과 생성 입력에 함께 쓰이며, 질문별 답변과 검색 문맥도 300개씩 저장됩니다. 검색 코퍼스도 100개 문서 전체를 사용합니다. 문항 수를 줄이는 옵션은 없습니다.
+위 기본 실행은 선택한 **10개 문서만** 파싱·청킹·임베딩해 검색에 사용하고, 그 문서의 **30개 질문만** 답변 생성·평가에 사용합니다. 문서 번호를 코드 수정 없이 바꾸려면 다음처럼 입력합니다.
+
+```bash
+python run.py evaluate --document-numbers 1,10,20,30,40,50,60,70,80,90 --data-dir ./data --metadata-csv ./data_list.csv --benchmark ./dev_benchmark_v1.1.json --out-dir ./results
+```
+
+전체 100개 문서와 300문항을 다시 사용하려면 `--document-numbers all`을 지정하세요. 선택한 번호는 `run_config.json`에 저장되며, 나중에 `ragas` 명령을 실행해도 같은 문항을 사용합니다. 각 실행의 결과는 서로 다른 `--out-dir`에 저장하세요.
 
 검색 평가는 리랭커가 정렬한 **청크 순위**에서 `chunk_hit_at_1`, `chunk_hit_at_5`, `chunk_recall_at_5`, `chunk_mrr`, `chunk_mrr_at_5`, `chunk_ndcg_at_5`를 계산합니다. 평가 JSON에는 현재 700/100 청킹의 정답 청크 ID가 없으므로, 각 문항의 `evidence` 문장을 같은 원문 파일의 청크 본문에 대조해 근거 청크 후보를 만듭니다. 이 점수는 **근거 문장 일치 기반의 임시 정답 청크**를 사용한 결과이며, 사람이 검증한 정답 청크 라벨과 같다고 간주하면 안 됩니다. 공백과 유니코드 표기만 정규화해 일치 여부를 확인합니다.
 
 근거 문장 중 하나라도 원문 청크에 연결되지 않으면 해당 문항의 청크 Hit/Recall/MRR/NDCG는 빈칸으로 저장합니다. `chunk_evidence_aligned`와 `evidence_quote_aligned_count`로 해당 문항을 확인하고, `chunk_evidence_alignment.jsonl`에서 연결되지 않은 근거 문장을 볼 수 있습니다. `evidence_quote_recall_in_context`는 실제 답변에 전달한 최종 6개 청크가 근거 문장을 얼마나 포함하는지 나타냅니다. 문서 길이별 `mrr_by_length.csv`의 평균도 이제 청크 MRR이며, 함께 표시되는 `aligned_question_count`로 평균에 포함된 문항 수를 확인할 수 있습니다.
 
-`evaluate`는 300개 답변 생성, GPT 판정, RAGAS 평가를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 300개 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다. 이전에 GPT 모델로 저장한 실행 설정도 이 명령에서는 Gemini 기본값으로 전환됩니다.
+`evaluate`는 선택한 문항의 답변 생성, GPT 판정, RAGAS 평가를 실행합니다. `--skip-ragas`로 기본 평가까지만 저장했다면 다음 명령으로 저장된 답변·문맥을 다시 생성하지 않고 RAGAS만 실행합니다. 이전에 GPT 모델로 저장한 실행 설정도 이 명령에서는 Gemini 기본값으로 전환됩니다.
 
 ```bash
 python run.py ragas --out-dir ./results

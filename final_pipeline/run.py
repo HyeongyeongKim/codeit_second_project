@@ -10,6 +10,19 @@ from pathlib import Path
 from rfp_rag.config import RagSettings
 
 
+def parse_document_numbers(value: str) -> tuple[int, ...]:
+    if value.strip().lower() == "all":
+        return tuple(range(1, 101))
+    try:
+        numbers = tuple(int(part.strip()) for part in value.split(","))
+        RagSettings(document_numbers=numbers).validate()
+    except (ValueError, TypeError) as exc:
+        raise argparse.ArgumentTypeError(
+            "문서 번호를 쉼표로 구분하거나 all을 입력하세요. 예: 1,10,20,30,40,50,60,70,80,90"
+        ) from exc
+    return numbers
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="RFP RAG: Dense + Kiwi BM25 + RRF + reranker")
     parser.add_argument("command", choices=("show-config", "answer", "evaluate", "ragas"))
@@ -21,6 +34,8 @@ def parse_args():
     parser.add_argument("--question", help="answer 명령에 사용할 질문")
     parser.add_argument("--refresh-cache", action="store_true", help="기존 문서 추출 캐시를 다시 생성")
     parser.add_argument("--skip-ragas", action="store_true", help="기본 평가만 실행하고 RAGAS는 나중에 실행")
+    parser.add_argument("--document-numbers", type=parse_document_numbers,
+                        help="파싱·임베딩·검색·생성·평가 문서 번호. 기본값: config.py의 10개 문서, 전체는 all")
     parser.add_argument("--chunk-size", type=int, default=700)
     parser.add_argument("--chunk-overlap", type=int, default=100)
     parser.add_argument("--embedding-model", default="dragonkue/BGE-m3-ko")
@@ -39,6 +54,7 @@ def parse_args():
 
 def settings_from_args(args) -> RagSettings:
     settings = RagSettings(
+        document_numbers=args.document_numbers or RagSettings().document_numbers,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         embedding_model=args.embedding_model,
@@ -89,10 +105,12 @@ def load_aliases(path: Path | None) -> dict[str, tuple[str, str]]:
 
 
 def run_ragas(samples, ids, base_scores, settings, out_dir):
-    from rfp_rag.data import EVALUATION_QUESTION_IDS
+    from rfp_rag.data import evaluation_question_ids
 
-    if ids != list(EVALUATION_QUESTION_IDS) or len(samples) != len(ids):
-        raise ValueError("RAGAS 입력은 100개 문서의 질문 300개여야 합니다.")
+    expected_ids = list(evaluation_question_ids(settings.document_numbers))
+    if ids != expected_ids or len(samples) != len(ids):
+        raise ValueError(f"RAGAS 입력은 선택한 {len(settings.document_numbers)}개 문서의 "
+                         f"질문 {len(expected_ids)}개여야 합니다.")
     if base_scores["id"].tolist() != ids:
         raise ValueError("RAGAS 입력과 기본 평가의 질문 ID 또는 순서가 다릅니다.")
     require_api_key("GOOGLE_API_KEY")
@@ -122,6 +140,9 @@ def main():
 
     if args.command == "ragas":
         import pandas as pd
+
+        if args.document_numbers is not None:
+            raise ValueError("ragas 명령은 저장된 실행의 문서 선택을 사용합니다. --document-numbers를 빼세요.")
 
         saved_settings = json.loads((args.out_dir / "run_config.json").read_text(encoding="utf-8"))
         settings = RagSettings(**saved_settings)
@@ -171,9 +192,6 @@ def main():
         print(record["answer"])
         return
 
-    from rfp_rag.data import select_evaluation_questions
-
-    items = select_evaluation_questions(items)
     print(f"평가 질문: {len(items)}문항 / 문서: "
           f"{len(set(item['document_id'] for item in items))}개")
     from rfp_rag.evaluation import evaluate_questions

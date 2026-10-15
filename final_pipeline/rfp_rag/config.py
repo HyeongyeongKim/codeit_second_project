@@ -3,9 +3,15 @@
 from dataclasses import asdict, dataclass
 
 
+# Edit this one list to change which documents are parsed, embedded, and evaluated.
+DEFAULT_DOCUMENT_NUMBERS = (1, 10, 20, 30, 40, 50, 60, 70, 80, 90)
+
+
 @dataclass(frozen=True)
 class RagSettings:
     # Retrieval defaults preserve the supplied notebook; generation uses Claude Haiku 4.5.
+    # The same selection controls parsing, embedding, search corpus, answers, and evaluation.
+    document_numbers: tuple[int, ...] = DEFAULT_DOCUMENT_NUMBERS
     chunk_size: int = 700
     chunk_overlap: int = 100
     embedding_model: str = "dragonkue/BGE-m3-ko"
@@ -31,6 +37,12 @@ class RagSettings:
     ragas_timeout: int = 300
 
     def validate(self) -> None:
+        numbers = self.document_numbers
+        if (not isinstance(numbers, (tuple, list)) or not numbers
+                or any(isinstance(number, bool) or not isinstance(number, int)
+                       or not 1 <= number <= 100 for number in numbers)
+                or len(numbers) != len(set(numbers))):
+            raise ValueError("document_numbers는 중복 없는 1~100 범위의 문서 번호 목록이어야 합니다.")
         if self.chunk_size <= 0 or not 0 <= self.chunk_overlap < self.chunk_size:
             raise ValueError("청킹 크기와 겹침 크기를 확인하세요.")
         if self.bm25_mode not in {"kiwi", "current"}:

@@ -10,12 +10,12 @@ from unittest.mock import patch
 
 from rfp_rag.config import RagSettings
 from rfp_rag.data import (EVALUATION_QUESTION_IDS, load_benchmark, normalize_filename, parse_files,
-                          select_evaluation_questions)
+                          prepare_corpus, select_evaluation_questions)
 from rfp_rag.evaluation import (build_chunk_evidence_index, match_evidence_chunks,
                                 retrieval_scores, evaluate_questions)
 from rfp_rag.hwp_parser_fix import apply_hwp_parser_fix
 from rfp_rag.pipeline import RagPipeline
-from run import run_ragas
+from run import parse_document_numbers, run_ragas
 
 
 class CoreTests(unittest.TestCase):
@@ -74,12 +74,60 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(result[0]["evidence_quotes"], ["근거"])
             selected = select_evaluation_questions(list(reversed(result)))
             expected = [f"DOC{document:03d}-Q{question:02d}"
-                        for document in range(1, 101)
+                        for document in (1, 10, 20, 30, 40, 50, 60, 70, 80, 90)
                         for question in range(1, 4)]
-            self.assertEqual(len(selected), 300)
+            self.assertEqual(len(selected), 30)
             self.assertEqual([item["id"] for item in selected], expected)
+            self.assertEqual(len(select_evaluation_questions(result, range(1, 101))), 300)
             with self.assertRaises(ValueError):
                 select_evaluation_questions(result[1:])
+
+    def test_selected_documents_alone_are_loaded_and_chunked(self):
+        items = [
+            {"id": f"DOC{doc:03d}-Q{question:02d}", "document_id": f"DOC{doc:03d}",
+             "source_filename": f"문서_{doc}.pdf"}
+            for doc in range(1, 101) for question in range(1, 4)
+        ]
+        requested = []
+
+        def fake_parse(_, required, refresh_cache=False):
+            requested.append(required)
+            return {f"문서_{doc}.pdf": "본문" for doc in (1, 10)}
+
+        def fake_load(parsed, _):
+            return [SimpleNamespace(page_content=text, metadata={"파일명": name})
+                    for name, text in parsed.items()]
+
+        class FakeSplitter:
+            def __init__(self, **kwargs):
+                pass
+
+            def split_documents(self, documents):
+                return documents
+
+        splitter_module = ModuleType("langchain_text_splitters")
+        splitter_module.RecursiveCharacterTextSplitter = FakeSplitter
+        with patch.dict("sys.modules", {"langchain_text_splitters": splitter_module}), \
+                patch("rfp_rag.data.load_benchmark", return_value=items), \
+                patch("rfp_rag.data.parse_files", side_effect=fake_parse), \
+                patch("rfp_rag.data.load_documents", side_effect=fake_load):
+            selected, documents, chunks = prepare_corpus(
+                Path("data"), Path("data_list.csv"), Path("benchmark.json"),
+                RagSettings(document_numbers=(1, 10)),
+            )
+        self.assertEqual(len(selected), 6)
+        self.assertEqual(len(documents), 2)
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(requested, [{"문서_1", "문서_10"}])
+        self.assertEqual([chunk.metadata["chunk_id"] for chunk in chunks], [0, 1])
+
+    def test_document_number_option_accepts_selection_or_all(self):
+        self.assertEqual(parse_document_numbers("1,10,20"), (1, 10, 20))
+        self.assertEqual(len(parse_document_numbers("all")), 100)
+        with self.assertRaises(ValueError):
+            RagSettings(document_numbers=(1, 1)).validate()
+        with self.assertRaises(ValueError):
+            RagSettings(document_numbers=(0,)).validate()
 
     def test_rrf_preserves_dense_first_tie_order_and_deduplicates_chunks(self):
         docs = [SimpleNamespace(metadata={"chunk_id": i}) for i in (1, 2, 3)]
@@ -176,7 +224,7 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(calls[0]["model"], "claude-haiku-4-5-20251001")
         self.assertEqual(calls[0]["max_tokens"], 4096)
 
-    def test_ragas_uses_gemini_for_all_300_questions(self):
+    def test_ragas_uses_gemini_for_the_selected_30_questions(self):
         calls = []
         module = ModuleType("langchain_google_genai")
 
@@ -202,7 +250,7 @@ class CoreTests(unittest.TestCase):
             run_ragas(samples, ids, FakeScores(), RagSettings(), Path("results"))
             self.assertEqual(evaluate.call_args.args[0], samples)
             self.assertEqual(evaluate.call_args.args[1], ids)
-            with self.assertRaisesRegex(ValueError, "300개"):
+            with self.assertRaisesRegex(ValueError, "30개"):
                 run_ragas(samples[:-1], ids[:-1], FakeScores(), RagSettings(), Path("results"))
         self.assertEqual(calls[0]["model"], "gemini-3.1-flash-lite")
         self.assertEqual(calls[0]["timeout"], 300)
