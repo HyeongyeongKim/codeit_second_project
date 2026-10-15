@@ -40,8 +40,11 @@ Colab에서는 [`RFP_RAG_Colab_실행.ipynb`](RFP_RAG_Colab_실행.ipynb)을 열
 
 ```bash
 python -m pip install -r requirements.txt
+python -m pip install --no-deps langchain-hwp-hwpx-loader==0.1.1
 python run.py show-config
 ```
+
+HWP 로더 0.1.1의 패키지 의존성 선언은 LangChain Core 1.x를 요구하므로, 위처럼 파서와 기존 LangChain 0.3 계열을 먼저 설치한 뒤 로더만 별도로 설치합니다. 로더의 호환 import 경로를 사용하며 파싱 코드와 모델·검색 설정은 바꾸지 않습니다.
 
 Colab에서는 먼저 Drive를 마운트합니다. 기본 경로는 원본 노트북과 같은 `/content/drive/MyDrive/data`, `/content/drive/MyDrive/data_list.csv`, `/content/drive/MyDrive/dev_benchmark_v1.1.json`입니다. 로컬에서는 아래처럼 경로를 지정합니다.
 
