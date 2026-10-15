@@ -64,7 +64,19 @@ python run.py answer --question "사업명에 관한 입찰 참가 자격은?" -
 
 ## API 키 넣는 곳
 
-키 값은 코드나 GitHub에 적지 않습니다. Google Colab에서는 왼쪽 사이드바의 **열쇠 모양 아이콘 → 보안 비밀(Secrets)**에 아래 이름으로 추가하고, 해당 노트북의 접근을 허용하세요. 로컬 PowerShell에서는 실행할 터미널에 환경 변수로 설정합니다.
+`run.py`와 같은 폴더인 `final_pipeline/.env`에 키를 넣으세요. 이 파일은 `.gitignore`에 등록되어 GitHub에 올라가지 않으며, 실행할 때 자동으로 읽습니다. GitHub에서 코드를 새로 내려받았다면 `.env.example`을 `.env`로 복사한 뒤 빈 값만 채우면 됩니다.
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env` 파일의 형식은 아래와 같습니다. `=` 뒤에 본인의 실제 키를 입력하세요. 키를 코드나 `.env.example`에 적어 GitHub에 올리지 마세요.
+
+```dotenv
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GOOGLE_API_KEY=
+```
 
 | 키 이름 | 쓰는 곳 | 필요한 명령 |
 |---|---|---|
@@ -72,11 +84,7 @@ python run.py answer --question "사업명에 관한 입찰 참가 자격은?" -
 | `OPENAI_API_KEY` | GPT-5 mini 답변 판정(LLM-as-judge) | `evaluate` |
 | `GOOGLE_API_KEY` | Gemini 3.1 Flash-Lite RAGAS 평가 | `evaluate`(RAGAS 포함), `ragas` |
 
-```powershell
-$env:ANTHROPIC_API_KEY = "실제 Anthropic 키"
-$env:OPENAI_API_KEY = "실제 OpenAI 키"
-$env:GOOGLE_API_KEY = "실제 Gemini API 키"
-```
+기존 환경 변수 값이 있으면 그 값을 우선 사용합니다. Colab에서는 `final_pipeline/.env`에 키를 넣거나 보안 비밀(Secrets)을 사용할 수 있습니다. GitHub Actions에서 실행하는 경우에는 저장소의 **Settings → Secrets and variables → Actions**에 등록하고 워크플로에서 환경 변수로 전달해야 합니다. GitHub에 등록한 비밀은 Colab으로 자동 전달되지 않습니다.
 
 `evaluate --skip-ragas`에는 `GOOGLE_API_KEY`가 필요하지 않습니다. 저장된 결과에 `ragas`만 실행할 때는 `GOOGLE_API_KEY`만 필요합니다.
 

@@ -59,6 +59,10 @@ def settings_from_args(args) -> RagSettings:
 
 def require_api_key(name: str) -> None:
     if not os.getenv(name):
+        from dotenv import load_dotenv
+
+        load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=False)
+    if not os.getenv(name):
         try:
             from google.colab import userdata
 
@@ -68,7 +72,7 @@ def require_api_key(name: str) -> None:
         if value:
             os.environ[name] = value
     if not os.getenv(name):
-        raise RuntimeError(f"{name}를 환경 변수 또는 Colab 보안 비밀에 설정하세요.")
+        raise RuntimeError(f"{name}를 final_pipeline/.env, 환경 변수 또는 Colab 보안 비밀에 설정하세요.")
 
 
 def load_aliases(path: Path | None) -> dict[str, tuple[str, str]]:
